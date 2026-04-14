@@ -1,16 +1,37 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Icon from "@/components/ui/icon";
+import { loginUser } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 export default function Login() {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    navigate("/dashboard");
+    setError("");
+    setLoading(true);
+
+    try {
+      const data = await loginUser(email, password);
+      login(data.token, data.user);
+
+      if (data.user.role === "designer") {
+        navigate("/dashboard");
+      } else {
+        navigate("/client");
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Ошибка входа");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -33,6 +54,13 @@ export default function Login() {
 
         {/* Card */}
         <div className="bg-white rounded-3xl shadow-lg shadow-stone/8 border border-border p-8 animate-slide-up" style={{ animationDelay: '0.1s' }}>
+          {error && (
+            <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm flex items-center gap-2">
+              <Icon name="AlertCircle" size={16} />
+              {error}
+            </div>
+          )}
+
           <form onSubmit={handleLogin} className="space-y-5">
             <div>
               <label className="block text-sm font-medium text-stone mb-1.5">Email</label>
@@ -43,6 +71,7 @@ export default function Login() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="anna@studio.ru"
+                  required
                   className="w-full pl-10 pr-4 py-3 rounded-xl border border-border bg-background text-stone placeholder:text-stone-light text-sm focus:outline-none focus:ring-2 focus:ring-terra/30 focus:border-terra transition-all"
                 />
               </div>
@@ -57,6 +86,7 @@ export default function Login() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
+                  required
                   className="w-full pl-10 pr-10 py-3 rounded-xl border border-border bg-background text-stone placeholder:text-stone-light text-sm focus:outline-none focus:ring-2 focus:ring-terra/30 focus:border-terra transition-all"
                 />
                 <button
@@ -81,9 +111,10 @@ export default function Login() {
 
             <button
               type="submit"
-              className="w-full terra-gradient text-white font-medium py-3.5 rounded-xl hover:opacity-90 transition-all hover:shadow-lg hover:shadow-terra/20 text-sm"
+              disabled={loading}
+              className="w-full terra-gradient text-white font-medium py-3.5 rounded-xl hover:opacity-90 transition-all hover:shadow-lg hover:shadow-terra/20 text-sm disabled:opacity-60"
             >
-              Войти
+              {loading ? "Входим..." : "Войти"}
             </button>
           </form>
 

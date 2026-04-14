@@ -1,45 +1,32 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Icon from "@/components/ui/icon";
+import { useAuth } from "@/lib/auth";
+import { getProjects, createProject } from "@/lib/api";
 
-const PROJECTS = [
-  {
-    id: 1,
-    name: "Квартира на Тверской",
-    status: "В работе",
-    statusColor: "bg-blue-50 text-blue-700 border-blue-200",
-    client: "Анна Петрова",
-    date: "15 янв 2025",
-    area: "92 м²",
-    budget: "4 200 000 ₽",
-    images: 12,
-    progress: 65,
-  },
-  {
-    id: 2,
-    name: "Загородный дом в Подмосковье",
-    status: "Согласование",
-    statusColor: "bg-amber-50 text-amber-700 border-amber-200",
-    client: "Игорь Сидоров",
-    date: "03 фев 2025",
-    area: "280 м²",
-    budget: "11 500 000 ₽",
-    images: 8,
-    progress: 40,
-  },
-  {
-    id: 3,
-    name: "Студия на Арбате",
-    status: "Завершён",
-    statusColor: "bg-green-50 text-green-700 border-green-200",
-    client: "Мария Козлова",
-    date: "28 дек 2024",
-    area: "45 м²",
-    budget: "1 800 000 ₽",
-    images: 24,
-    progress: 100,
-  },
-];
+interface Project {
+  id: string;
+  title: string;
+  status: string;
+  description?: string;
+  address?: string;
+  area?: number;
+  rooms?: number;
+  style?: string;
+  budget?: number;
+  start_date?: string;
+  deadline?: string;
+  created_at: string;
+  designer_first_name?: string;
+  designer_last_name?: string;
+}
+
+const STATUS_MAP: Record<string, { label: string; color: string }> = {
+  draft: { label: "Черновик", color: "bg-gray-50 text-gray-600 border-gray-200" },
+  active: { label: "В работе", color: "bg-blue-50 text-blue-700 border-blue-200" },
+  review: { label: "Согласование", color: "bg-amber-50 text-amber-700 border-amber-200" },
+  completed: { label: "Завершён", color: "bg-green-50 text-green-700 border-green-200" },
+};
 
 const NAV_ITEMS = [
   { icon: "LayoutDashboard", label: "Дашборд", id: "dashboard", path: "" },
@@ -47,14 +34,114 @@ const NAV_ITEMS = [
   { icon: "CheckSquare", label: "Задачи", id: "tasks", path: "/tasks" },
   { icon: "Users", label: "Клиенты", id: "clients", path: "" },
   { icon: "Handshake", label: "Гильдия", id: "guild", path: "/guild" },
-  { icon: "MessageCircle", label: "Сообщения", id: "messages", path: "", badge: 3 },
+  { icon: "MessageCircle", label: "Сообщения", id: "messages", path: "", badge: 0 },
   { icon: "User", label: "Профиль", id: "profile", path: "" },
 ];
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { user, logout, loading: authLoading } = useAuth();
   const [activeNav, setActiveNav] = useState("dashboard");
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loadingProjects, setLoadingProjects] = useState(true);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [creating, setCreating] = useState(false);
+
+  // New project form
+  const [newTitle, setNewTitle] = useState("");
+  const [newDescription, setNewDescription] = useState("");
+  const [newAddress, setNewAddress] = useState("");
+  const [newArea, setNewArea] = useState("");
+  const [newRooms, setNewRooms] = useState("");
+  const [newStyle, setNewStyle] = useState("");
+  const [newBudget, setNewBudget] = useState("");
+
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate("/login");
+      return;
+    }
+    if (user) {
+      loadProjects();
+    }
+  }, [user, authLoading]);
+
+  const loadProjects = async () => {
+    try {
+      const data = await getProjects();
+      setProjects(data.projects || []);
+    } catch (err) {
+      console.error("Failed to load projects:", err);
+    } finally {
+      setLoadingProjects(false);
+    }
+  };
+
+  const handleCreateProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTitle.trim()) return;
+    setCreating(true);
+
+    try {
+      await createProject({
+        title: newTitle,
+        description: newDescription || undefined,
+        address: newAddress || undefined,
+        area: newArea ? parseFloat(newArea) : undefined,
+        rooms: newRooms ? parseInt(newRooms) : undefined,
+        style: newStyle || undefined,
+        budget: newBudget ? parseFloat(newBudget) : undefined,
+      });
+
+      setShowCreateModal(false);
+      setNewTitle("");
+      setNewDescription("");
+      setNewAddress("");
+      setNewArea("");
+      setNewRooms("");
+      setNewStyle("");
+      setNewBudget("");
+      loadProjects();
+    } catch (err) {
+      console.error("Failed to create project:", err);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleLogout = () => {
+    logout();
+    navigate("/");
+  };
+
+  const formatDate = (date: string) => {
+    return new Date(date).toLocaleDateString("ru-RU", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+  const formatBudget = (budget?: number) => {
+    if (!budget) return "-";
+    return new Intl.NumberFormat("ru-RU", { style: "currency", currency: "RUB", maximumFractionDigits: 0 }).format(budget);
+  };
+
+  const userInitials = user
+    ? `${(user.first_name || "")[0] || ""}${(user.last_name || "")[0] || ""}`.toUpperCase()
+    : "?";
+
+  const activeCount = projects.filter((p) => p.status === "active").length;
+  const reviewCount = projects.filter((p) => p.status === "review").length;
+  const completedCount = projects.filter((p) => p.status === "completed").length;
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="animate-pulse text-stone-mid">Загрузка...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background font-body flex">
@@ -73,11 +160,13 @@ export default function Dashboard() {
         <div className="p-4 border-b border-border">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 terra-gradient rounded-full flex items-center justify-center text-white font-semibold text-sm">
-              ЕС
+              {userInitials}
             </div>
             <div>
-              <div className="text-sm font-semibold text-stone">Елена Смирнова</div>
-              <div className="text-xs text-stone-mid">Дизайнер интерьеров</div>
+              <div className="text-sm font-semibold text-stone">{user?.first_name} {user?.last_name}</div>
+              <div className="text-xs text-stone-mid">
+                {user?.role === "designer" ? "Дизайнер интерьеров" : user?.role === "client" ? "Клиент" : "Работник"}
+              </div>
             </div>
           </div>
         </div>
@@ -95,18 +184,18 @@ export default function Dashboard() {
             >
               <Icon name={item.icon} fallback="Circle" size={17} />
               <span>{item.label}</span>
-              {item.badge && (
+              {item.badge ? (
                 <span className="ml-auto w-5 h-5 terra-gradient rounded-full text-white text-xs flex items-center justify-center">
                   {item.badge}
                 </span>
-              )}
+              ) : null}
             </button>
           ))}
         </nav>
 
         <div className="p-3 border-t border-border">
           <button
-            onClick={() => navigate("/")}
+            onClick={handleLogout}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-stone-mid hover:bg-muted hover:text-stone transition-all"
           >
             <Icon name="LogOut" size={17} />
@@ -127,11 +216,6 @@ export default function Dashboard() {
           >
             <Icon name={item.icon} fallback="Circle" size={19} />
             <span className="text-xs">{item.label}</span>
-            {item.badge && (
-              <span className="absolute -top-0.5 right-1 w-4 h-4 terra-gradient rounded-full text-white text-xs flex items-center justify-center">
-                {item.badge}
-              </span>
-            )}
           </button>
         ))}
       </div>
@@ -147,25 +231,31 @@ export default function Dashboard() {
               {activeNav === "tasks" && "Задачи"}
               {activeNav === "clients" && "Клиенты"}
               {activeNav === "guild" && "Гильдия"}
-              {activeNav === "docs" && "Документы"}
               {activeNav === "messages" && "Сообщения"}
               {activeNav === "profile" && "Профиль"}
             </h1>
-            <p className="text-stone-mid text-sm mt-0.5">Среда, 14 апреля 2025</p>
+            <p className="text-stone-mid text-sm mt-0.5">
+              {new Date().toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+            </p>
           </div>
-          <button className="terra-gradient text-white text-sm font-medium px-4 py-2.5 rounded-xl flex items-center gap-2 hover:opacity-90 transition-opacity">
-            <Icon name="Plus" size={15} className="text-white" />
-            <span className="hidden sm:inline">Новый проект</span>
-          </button>
+          {user?.role === "designer" && (
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="terra-gradient text-white text-sm font-medium px-4 py-2.5 rounded-xl flex items-center gap-2 hover:opacity-90 transition-opacity"
+            >
+              <Icon name="Plus" size={15} className="text-white" />
+              <span className="hidden sm:inline">Новый проект</span>
+            </button>
+          )}
         </div>
 
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           {[
-            { label: "Активных проектов", value: "2", icon: "FolderOpen", color: "text-blue-500" },
-            { label: "Клиентов", value: "8", icon: "Users", color: "text-purple-500" },
-            { label: "На согласовании", value: "1", icon: "Clock", color: "text-amber-500" },
-            { label: "Завершено", value: "12", icon: "CheckCircle", color: "text-green-500" },
+            { label: "Всего проектов", value: String(projects.length), icon: "FolderOpen", color: "text-blue-500" },
+            { label: "Активных", value: String(activeCount), icon: "Zap", color: "text-purple-500" },
+            { label: "На согласовании", value: String(reviewCount), icon: "Clock", color: "text-amber-500" },
+            { label: "Завершено", value: String(completedCount), icon: "CheckCircle", color: "text-green-500" },
           ].map((s) => (
             <div key={s.label} className="bg-white rounded-2xl p-4 border border-border">
               <div className="flex items-center justify-between mb-2">
@@ -181,92 +271,193 @@ export default function Dashboard() {
         <div className="mb-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-body font-semibold text-stone">Текущие проекты</h2>
-            <button className="text-terra text-sm hover:underline">Все проекты</button>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {PROJECTS.map((p, i) => (
-              <div
-                key={p.id}
-                onClick={() => navigate(`/project/${p.id}`)}
-                className="bg-white rounded-2xl border border-border overflow-hidden hover-scale cursor-pointer hover:border-terra/30 hover:shadow-md hover:shadow-terra/5 transition-all animate-fade-in"
-                style={{ animationDelay: `${i * 0.1}s` }}
-              >
-                {/* Cover */}
-                <div className="h-36 bg-gradient-to-br from-terra-pale via-terra/10 to-stone/5 flex items-center justify-center relative">
-                  <Icon name="Image" size={32} className="text-terra/25" />
-                  <span className={`absolute top-3 right-3 text-xs px-2.5 py-1 rounded-full border font-medium ${p.statusColor}`}>
-                    {p.status}
-                  </span>
-                </div>
-
-                {/* Content */}
-                <div className="p-4">
-                  <h3 className="font-semibold text-stone text-sm mb-1 leading-snug">{p.name}</h3>
-
-                  <div className="flex items-center gap-1.5 text-stone-mid text-xs mb-3">
-                    <Icon name="User" size={11} />
-                    <span>{p.client}</span>
-                  </div>
-
-                  {/* Progress */}
-                  <div className="mb-3">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs text-stone-light">Готовность</span>
-                      <span className="text-xs text-stone-mid font-medium">{p.progress}%</span>
-                    </div>
-                    <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className="h-full terra-gradient rounded-full transition-all"
-                        style={{ width: `${p.progress}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2 pt-3 border-t border-border">
-                    <div className="text-center">
-                      <div className="text-xs text-stone-light">Площадь</div>
-                      <div className="text-xs font-medium text-stone mt-0.5">{p.area}</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-xs text-stone-light">Фото</div>
-                      <div className="text-xs font-medium text-stone mt-0.5">{p.images}</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-xs text-stone-light">Дата</div>
-                      <div className="text-xs font-medium text-stone mt-0.5">{p.date}</div>
-                    </div>
-                  </div>
-                </div>
+          {loadingProjects ? (
+            <div className="text-center py-12 text-stone-mid animate-pulse">
+              Загрузка проектов...
+            </div>
+          ) : projects.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-border p-12 text-center">
+              <div className="w-16 h-16 bg-terra-pale rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <Icon name="FolderPlus" size={28} className="text-terra" />
               </div>
-            ))}
-          </div>
-        </div>
+              <h3 className="font-display text-xl text-stone mb-2">Пока нет проектов</h3>
+              <p className="text-stone-mid text-sm mb-6">Создайте свой первый проект, чтобы начать работу</p>
+              {user?.role === "designer" && (
+                <button
+                  onClick={() => setShowCreateModal(true)}
+                  className="terra-gradient text-white font-medium px-6 py-3 rounded-xl hover:opacity-90 transition-all text-sm"
+                >
+                  Создать первый проект
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {projects.map((p, i) => {
+                const statusInfo = STATUS_MAP[p.status] || STATUS_MAP.draft;
+                return (
+                  <div
+                    key={p.id}
+                    onClick={() => navigate(`/project/${p.id}`)}
+                    className="bg-white rounded-2xl border border-border overflow-hidden hover-scale cursor-pointer hover:border-terra/30 hover:shadow-md hover:shadow-terra/5 transition-all animate-fade-in"
+                    style={{ animationDelay: `${i * 0.1}s` }}
+                  >
+                    {/* Cover */}
+                    <div className="h-36 bg-gradient-to-br from-terra-pale via-terra/10 to-stone/5 flex items-center justify-center relative">
+                      <Icon name="Image" size={32} className="text-terra/25" />
+                      <span className={`absolute top-3 right-3 text-xs px-2.5 py-1 rounded-full border font-medium ${statusInfo.color}`}>
+                        {statusInfo.label}
+                      </span>
+                    </div>
 
-        {/* Recent activity */}
-        <div className="bg-white rounded-2xl border border-border p-5">
-          <h2 className="font-body font-semibold text-stone mb-4">Последние действия</h2>
-          <div className="space-y-3">
-            {[
-              { icon: "Upload", text: "Загружены визуализации гостиной", project: "Квартира на Тверской", time: "2 ч назад" },
-              { icon: "MessageCircle", text: "Новый комментарий от клиента", project: "Загородный дом в Подмосковье", time: "5 ч назад" },
-              { icon: "CheckCircle", text: "Смета согласована", project: "Студия на Арбате", time: "вчера" },
-              { icon: "FileText", text: "Загружен договор", project: "Квартира на Тверской", time: "2 дня назад" },
-            ].map((a, i) => (
-              <div key={i} className="flex items-center gap-3 py-2">
-                <div className="w-8 h-8 bg-terra-pale rounded-lg flex items-center justify-center flex-shrink-0">
-                  <Icon name={a.icon} fallback="Circle" size={14} className="text-terra" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-stone">{a.text}</p>
-                  <p className="text-xs text-stone-light">{a.project}</p>
-                </div>
-                <span className="text-xs text-stone-light whitespace-nowrap">{a.time}</span>
-              </div>
-            ))}
-          </div>
+                    {/* Content */}
+                    <div className="p-4">
+                      <h3 className="font-semibold text-stone text-sm mb-1 leading-snug">{p.title}</h3>
+
+                      {p.address && (
+                        <div className="flex items-center gap-1.5 text-stone-mid text-xs mb-3">
+                          <Icon name="MapPin" size={11} />
+                          <span>{p.address}</span>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-3 gap-2 pt-3 border-t border-border">
+                        <div className="text-center">
+                          <div className="text-xs text-stone-light">Площадь</div>
+                          <div className="text-xs font-medium text-stone mt-0.5">{p.area ? `${p.area} м²` : "-"}</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-xs text-stone-light">Бюджет</div>
+                          <div className="text-xs font-medium text-stone mt-0.5">{formatBudget(p.budget)}</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-xs text-stone-light">Дата</div>
+                          <div className="text-xs font-medium text-stone mt-0.5">{formatDate(p.created_at)}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </main>
+
+      {/* Create Project Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white rounded-3xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="font-display text-2xl font-light text-stone">Новый проект</h2>
+              <button onClick={() => setShowCreateModal(false)} className="p-2 hover:bg-muted rounded-xl transition-colors">
+                <Icon name="X" size={18} className="text-stone-mid" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateProject} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-stone mb-1.5">Название проекта *</label>
+                <input
+                  type="text"
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  placeholder="Квартира на Тверской"
+                  required
+                  className="w-full px-4 py-3 rounded-xl border border-border bg-background text-stone placeholder:text-stone-light text-sm focus:outline-none focus:ring-2 focus:ring-terra/30 focus:border-terra transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-stone mb-1.5">Описание</label>
+                <textarea
+                  value={newDescription}
+                  onChange={(e) => setNewDescription(e.target.value)}
+                  placeholder="Краткое описание проекта..."
+                  rows={3}
+                  className="w-full px-4 py-3 rounded-xl border border-border bg-background text-stone placeholder:text-stone-light text-sm focus:outline-none focus:ring-2 focus:ring-terra/30 focus:border-terra transition-all resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-stone mb-1.5">Адрес</label>
+                <input
+                  type="text"
+                  value={newAddress}
+                  onChange={(e) => setNewAddress(e.target.value)}
+                  placeholder="ул. Тверская, д. 15, кв. 42"
+                  className="w-full px-4 py-3 rounded-xl border border-border bg-background text-stone placeholder:text-stone-light text-sm focus:outline-none focus:ring-2 focus:ring-terra/30 focus:border-terra transition-all"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-stone mb-1.5">Площадь (м²)</label>
+                  <input
+                    type="number"
+                    value={newArea}
+                    onChange={(e) => setNewArea(e.target.value)}
+                    placeholder="85"
+                    className="w-full px-4 py-3 rounded-xl border border-border bg-background text-stone placeholder:text-stone-light text-sm focus:outline-none focus:ring-2 focus:ring-terra/30 focus:border-terra transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-stone mb-1.5">Комнат</label>
+                  <input
+                    type="number"
+                    value={newRooms}
+                    onChange={(e) => setNewRooms(e.target.value)}
+                    placeholder="3"
+                    className="w-full px-4 py-3 rounded-xl border border-border bg-background text-stone placeholder:text-stone-light text-sm focus:outline-none focus:ring-2 focus:ring-terra/30 focus:border-terra transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-stone mb-1.5">Стиль</label>
+                  <input
+                    type="text"
+                    value={newStyle}
+                    onChange={(e) => setNewStyle(e.target.value)}
+                    placeholder="Современный"
+                    className="w-full px-4 py-3 rounded-xl border border-border bg-background text-stone placeholder:text-stone-light text-sm focus:outline-none focus:ring-2 focus:ring-terra/30 focus:border-terra transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-stone mb-1.5">Бюджет</label>
+                  <input
+                    type="number"
+                    value={newBudget}
+                    onChange={(e) => setNewBudget(e.target.value)}
+                    placeholder="1500000"
+                    className="w-full px-4 py-3 rounded-xl border border-border bg-background text-stone placeholder:text-stone-light text-sm focus:outline-none focus:ring-2 focus:ring-terra/30 focus:border-terra transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className="flex-1 py-3 rounded-xl border border-border text-stone-mid text-sm font-medium hover:bg-muted transition-colors"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="submit"
+                  disabled={creating}
+                  className="flex-1 terra-gradient text-white py-3 rounded-xl text-sm font-medium hover:opacity-90 transition-all disabled:opacity-60"
+                >
+                  {creating ? "Создаём..." : "Создать проект"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

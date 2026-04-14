@@ -1,0 +1,17 @@
+[
+  {
+    "name": "List all designers",
+    "method": "GET",
+    "path": "/"
+  },
+  {
+    "name": "Filter by city",
+    "method": "GET",
+    "path": "/?city=Moscow"
+  },
+  {
+    "name": "Search designers",
+    "method": "GET",
+    "path": "/?search=test"
+  }
+]

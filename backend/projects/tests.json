@@ -1,0 +1,27 @@
+[
+  {
+    "name": "List projects",
+    "method": "GET",
+    "path": "/",
+    "headers": {
+      "Authorization": "Bearer <token>"
+    }
+  },
+  {
+    "name": "Create project",
+    "method": "POST",
+    "path": "/",
+    "headers": {
+      "Authorization": "Bearer <token>"
+    },
+    "body": {
+      "title": "Test project",
+      "description": "Test description",
+      "address": "Moscow",
+      "area": 85.5,
+      "rooms": 3,
+      "style": "modern",
+      "budget": 1500000
+    }
+  }
+]

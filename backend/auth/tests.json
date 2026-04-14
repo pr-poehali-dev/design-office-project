@@ -1,0 +1,32 @@
+[
+  {
+    "name": "Register new user",
+    "method": "POST",
+    "path": "/register",
+    "body": {
+      "email": "test@example.com",
+      "password": "test12345",
+      "role": "designer",
+      "first_name": "Test",
+      "last_name": "User",
+      "city": "Moscow"
+    }
+  },
+  {
+    "name": "Login user",
+    "method": "POST",
+    "path": "/login",
+    "body": {
+      "email": "test@example.com",
+      "password": "test12345"
+    }
+  },
+  {
+    "name": "Get current user",
+    "method": "GET",
+    "path": "/me",
+    "headers": {
+      "Authorization": "Bearer <token>"
+    }
+  }
+]
