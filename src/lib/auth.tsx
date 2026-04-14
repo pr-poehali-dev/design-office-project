@@ -33,6 +33,18 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+function parseJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1]));
+    if (payload.exp && payload.exp * 1000 < Date.now()) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(
@@ -57,25 +69,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await getMe();
       setUser(data.user);
     } catch {
-      logout();
+      // don't logout on network errors
     }
   };
 
   useEffect(() => {
-    if (token) {
-      getMe()
-        .then((data) => {
-          setUser(data.user);
-        })
-        .catch(() => {
-          logout();
-        })
-        .finally(() => {
-          setLoading(false);
-        });
-    } else {
+    if (!token) {
       setLoading(false);
+      return;
     }
+
+    const payload = parseJwtPayload(token);
+    if (!payload) {
+      logout();
+      setLoading(false);
+      return;
+    }
+
+    getMe()
+      .then((data) => {
+        setUser(data.user);
+      })
+      .catch(() => {
+        setUser({
+          id: payload.userId as string,
+          email: payload.email as string,
+          role: payload.role as "designer" | "client" | "worker",
+          first_name: "",
+          last_name: "",
+          rating: 0,
+          projects_count: 0,
+        });
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, []);
 
   return (
