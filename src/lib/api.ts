@@ -38,7 +38,7 @@ export async function registerUser(data: {
   specialization?: string;
   phone?: string;
 }) {
-  const res = await fetch(`${API_URLS.auth}/register`, {
+  const res = await fetch(`${API_URLS.auth}?action=register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -47,7 +47,7 @@ export async function registerUser(data: {
 }
 
 export async function loginUser(email: string, password: string) {
-  const res = await fetch(`${API_URLS.auth}/login`, {
+  const res = await fetch(`${API_URLS.auth}?action=login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
@@ -56,7 +56,7 @@ export async function loginUser(email: string, password: string) {
 }
 
 export async function getMe() {
-  const res = await fetch(`${API_URLS.auth}/me`, {
+  const res = await fetch(`${API_URLS.auth}?action=me`, {
     method: "GET",
     headers: authHeaders(),
   });
@@ -68,7 +68,7 @@ export async function inviteMember(data: {
   project_id: string;
   role: string;
 }) {
-  const res = await fetch(`${API_URLS.auth}/invite`, {
+  const res = await fetch(`${API_URLS.auth}?action=invite`, {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify(data),
@@ -78,7 +78,7 @@ export async function inviteMember(data: {
 
 // Projects
 export async function getProjects() {
-  const res = await fetch(`${API_URLS.projects}/`, {
+  const res = await fetch(API_URLS.projects, {
     method: "GET",
     headers: authHeaders(),
   });
@@ -96,7 +96,7 @@ export async function createProject(data: {
   start_date?: string;
   deadline?: string;
 }) {
-  const res = await fetch(`${API_URLS.projects}/`, {
+  const res = await fetch(API_URLS.projects, {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify(data),
@@ -105,7 +105,7 @@ export async function createProject(data: {
 }
 
 export async function getProject(id: string) {
-  const res = await fetch(`${API_URLS.projects}/${id}`, {
+  const res = await fetch(`${API_URLS.projects}?id=${id}`, {
     method: "GET",
     headers: authHeaders(),
   });
@@ -116,7 +116,7 @@ export async function updateProject(
   id: string,
   data: Record<string, unknown>
 ) {
-  const res = await fetch(`${API_URLS.projects}/${id}`, {
+  const res = await fetch(`${API_URLS.projects}?id=${id}`, {
     method: "PUT",
     headers: authHeaders(),
     body: JSON.stringify(data),

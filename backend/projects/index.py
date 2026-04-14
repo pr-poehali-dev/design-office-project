@@ -97,12 +97,14 @@ def authenticate(headers):
         conn.close()
 
 
-def parse_route(path):
-    """Parse path and return (route_type, project_id).
+def parse_route(event):
+    """Parse route from query params or path. Returns (route_type, project_id)."""
+    qsp = event.get("queryStringParameters") or {}
+    pid = qsp.get("id")
+    if pid:
+        return "byId", pid
 
-    route_type is 'root' or 'byId'.
-    project_id is the UUID string or None.
-    """
+    path = event.get("path", "/")
     clean = path.rstrip("/")
     segments = [s for s in clean.split("/") if s]
     last = segments[-1] if segments else ""
@@ -386,7 +388,7 @@ def handler(event, context=None):
         return auth_result
     user = auth_result
 
-    route_type, project_id = parse_route(path)
+    route_type, project_id = parse_route(event)
 
     try:
         if route_type == "root":

@@ -77,7 +77,12 @@ def parse_body(body):
     return body
 
 
-def get_route(path):
+def get_route(event):
+    qsp = event.get("queryStringParameters") or {}
+    action = qsp.get("action", "")
+    if action:
+        return action
+    path = event.get("path", "/")
     clean = path.rstrip("/")
     segments = clean.split("/")
     last = segments[-1] if segments else ""
@@ -340,7 +345,7 @@ def handler(event, context=None):
             "body": "",
         }
 
-    route = get_route(path)
+    route = get_route(event)
 
     try:
         if route == "register":
