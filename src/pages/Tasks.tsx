@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Icon from "@/components/ui/icon";
+import { useAuth } from "@/lib/auth";
 import { Task, PRIORITY_CONFIG, INIT_TASKS, NAV_ITEMS } from "./tasks.types";
 import TaskCalendarView from "./TaskCalendarView";
 import TaskBoardView from "./TaskBoardView";
 
 export default function Tasks() {
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
   const [tasks, setTasks] = useState<Task[]>(INIT_TASKS);
   const [filterProject, setFilterProject] = useState("Все проекты");
   const [filterPriority, setFilterPriority] = useState("Все");
@@ -32,10 +34,12 @@ export default function Tasks() {
         </div>
         <div className="p-4 border-b border-border">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 terra-gradient rounded-full flex items-center justify-center text-white font-semibold text-sm">ЕС</div>
+            <div className="w-10 h-10 terra-gradient rounded-full flex items-center justify-center text-white font-semibold text-sm">
+              {`${(user?.first_name || "")[0] || ""}${(user?.last_name || "")[0] || ""}`.toUpperCase() || "?"}
+            </div>
             <div>
-              <div className="text-sm font-semibold text-stone">Елена Смирнова</div>
-              <div className="text-xs text-stone-mid">Дизайнер интерьеров</div>
+              <div className="text-sm font-semibold text-stone">{user?.first_name} {user?.last_name}</div>
+              <div className="text-xs text-stone-mid">{user?.role === "designer" ? "Дизайнер интерьеров" : user?.role === "client" ? "Клиент" : "Работник"}</div>
             </div>
           </div>
         </div>
@@ -57,7 +61,7 @@ export default function Tasks() {
           ))}
         </nav>
         <div className="p-3 border-t border-border">
-          <button onClick={() => navigate("/")} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-stone-mid hover:bg-muted hover:text-stone transition-all">
+          <button onClick={() => { logout(); navigate("/"); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-stone-mid hover:bg-muted hover:text-stone transition-all">
             <Icon name="LogOut" size={17} /><span>Выйти</span>
           </button>
         </div>
