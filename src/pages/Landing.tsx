@@ -1,5 +1,7 @@
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Icon from "@/components/ui/icon";
+import { useAuth } from "@/lib/auth";
 
 const features = [
   {
@@ -42,6 +44,13 @@ const steps = [
 
 export default function Landing() {
   const navigate = useNavigate();
+  const { user, loading } = useAuth();
+
+  useEffect(() => {
+    if (!loading && user) {
+      navigate(user.role === "client" ? "/client" : "/dashboard", { replace: true });
+    }
+  }, [user, loading]);
 
   return (
     <div className="min-h-screen warm-bg font-body">

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Icon from "@/components/ui/icon";
 import { registerUser } from "@/lib/api";
@@ -8,7 +8,13 @@ type Role = "designer" | "client";
 
 export default function Register() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, user, loading: authLoading } = useAuth();
+
+  useEffect(() => {
+    if (!authLoading && user) {
+      navigate(user.role === "client" ? "/client" : "/dashboard", { replace: true });
+    }
+  }, [user, authLoading]);
   const [role, setRole] = useState<Role>("designer");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");

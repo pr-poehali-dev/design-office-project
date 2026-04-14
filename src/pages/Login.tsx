@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Icon from "@/components/ui/icon";
 import { loginUser } from "@/lib/api";
@@ -6,8 +6,14 @@ import { useAuth } from "@/lib/auth";
 
 export default function Login() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, user, loading: authLoading } = useAuth();
   const [email, setEmail] = useState("");
+
+  useEffect(() => {
+    if (!authLoading && user) {
+      navigate(user.role === "client" ? "/client" : "/dashboard", { replace: true });
+    }
+  }, [user, authLoading]);
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState("");
