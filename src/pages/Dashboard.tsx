@@ -185,6 +185,7 @@ export default function Dashboard() {
             {PROJECTS.map((p, i) => (
               <div
                 key={p.id}
+                onClick={() => navigate(`/project/${p.id}`)}
                 className="bg-white rounded-2xl border border-border overflow-hidden hover-scale cursor-pointer hover:border-terra/30 hover:shadow-md hover:shadow-terra/5 transition-all animate-fade-in"
                 style={{ animationDelay: `${i * 0.1}s` }}
               >
