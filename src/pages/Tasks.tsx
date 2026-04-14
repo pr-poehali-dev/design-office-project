@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Icon from "@/components/ui/icon";
 import { useAuth } from "@/lib/auth";
-import { getAllTasks, getProjects, createTask, updateTask } from "@/lib/api";
+import { useAllTasks, useProjects, useCreateTask, useUpdateTask } from "@/lib/queries";
 import { Task, PRIORITY_CONFIG, NAV_ITEMS } from "./tasks.types";
 import TaskCalendarView from "./TaskCalendarView";
 import TaskBoardView from "./TaskBoardView";
@@ -15,32 +15,24 @@ interface ProjectOption {
 export default function Tasks() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [filterProject, setFilterProject] = useState("all");
   const [filterPriority, setFilterPriority] = useState("all");
   const [showModal, setShowModal] = useState(false);
-  const [loading, setLoading] = useState(true);
 
-  const loadData = async () => {
-    try {
-      const [tasksRes, projectsRes] = await Promise.all([getAllTasks(), getProjects()]);
-      setTasks(tasksRes.tasks || []);
-      setProjects((projectsRes.projects || []).map((p: { id: string; title: string }) => ({ id: p.id, title: p.title })));
-    } catch { /* empty */ }
-    setLoading(false);
-  };
-
-  useEffect(() => { loadData(); }, []);
+  const { data: tasks = [], isLoading: loadingTasks } = useAllTasks();
+  const { data: projectsRaw = [], isLoading: loadingProjects } = useProjects();
+  const projects: ProjectOption[] = projectsRaw.map((p: { id: string; title: string }) => ({ id: p.id, title: p.title }));
+  const loading = loadingTasks || loadingProjects;
+  const updateTaskMutation = useUpdateTask();
+  const createTaskMutation = useCreateTask();
 
   const handleStatusChange = async (taskId: string, newStatus: string) => {
-    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus as Task["status"] } : t));
-    try { await updateTask(taskId, { status: newStatus }); } catch { loadData(); }
+    try { await updateTaskMutation.mutateAsync({ id: taskId, data: { status: newStatus } }); } catch { /* empty */ }
   };
 
   const handleAddTask = async (data: { project_id: string; title: string; priority: string; deadline: string; description: string }) => {
     try {
-      await createTask({
+      await createTaskMutation.mutateAsync({
         project_id: data.project_id,
         title: data.title,
         priority: data.priority || undefined,
@@ -48,7 +40,6 @@ export default function Tasks() {
         description: data.description || undefined,
       });
       setShowModal(false);
-      loadData();
     } catch { /* empty */ }
   };
 

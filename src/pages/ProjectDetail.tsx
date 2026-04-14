@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Icon from "@/components/ui/icon";
 import { useAuth } from "@/lib/auth";
-import { getProject } from "@/lib/api";
+import { useProject } from "@/lib/queries";
 import { TABS, fmtMoney } from "./projectDetail.types";
 import { OverviewTab, ExecutionTab } from "./ProjectOverviewTab";
 import { BriefTab, EstimateTab, FinanceTab, DocsTab } from "./ProjectDataTabs";
@@ -71,39 +71,17 @@ export default function ProjectDetail() {
   const { user, logout, loading: authLoading } = useAuth();
   const [activeTab, setActiveTab] = useState("overview");
   const [activeNav, setActiveNav] = useState("projects");
-  const [project, setProject] = useState<ProjectData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+
+  const { data: project, isLoading: loading, error: queryError, refetch } = useProject(id, !!user);
+  const error = queryError ? (
+    queryError.message.includes("not found") || queryError.message.includes("Not found") ? "not_found" :
+    queryError.message.includes("Access denied") ? "access_denied" :
+    queryError.message
+  ) : "";
 
   useEffect(() => {
-    if (!authLoading && !user) {
-      navigate("/login");
-      return;
-    }
-    if (user && id) {
-      loadProject();
-    }
-  }, [user, authLoading, id]);
-
-  const loadProject = async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const data = await getProject(id!);
-      setProject(data.project);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Ошибка загрузки";
-      if (msg.includes("not found") || msg.includes("Not found")) {
-        setError("not_found");
-      } else if (msg.includes("Access denied")) {
-        setError("access_denied");
-      } else {
-        setError(msg);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
+    if (!authLoading && !user) navigate("/login");
+  }, [user, authLoading]);
 
   const handleNavClick = (item: { id: string; path: string }) => {
     setActiveNav(item.id);
@@ -262,7 +240,7 @@ export default function ProjectDetail() {
               <p className="text-stone-mid text-sm mb-6">{error}</p>
               <div className="flex gap-3">
                 <button
-                  onClick={loadProject}
+                  onClick={() => refetch()}
                   className="terra-gradient text-white font-medium px-6 py-3 rounded-xl hover:opacity-90 transition-all text-sm"
                 >
                   Попробовать снова

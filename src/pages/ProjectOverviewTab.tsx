@@ -2,8 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import Icon from "@/components/ui/icon";
 import { fmtMoney } from "./projectDetail.types";
-import { getTasksByProject, createTask, updateTask, getMessages, sendMessage, inviteMember } from "@/lib/api";
-import { deleteProject } from "@/lib/api";
+import { useProjectTasks, useCreateTask, useUpdateTask, useMessages, useSendMessage, useInviteMember, useDeleteProject } from "@/lib/queries";
 import { useAuth } from "@/lib/auth";
 import type { ProjectData } from "./ProjectDetail";
 
@@ -47,7 +46,6 @@ export function OverviewTab({ project }: OverviewProps) {
   const [deleting, setDeleting] = useState(false);
 
   // Tasks
-  const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [creatingTask, setCreatingTask] = useState(false);
@@ -55,7 +53,6 @@ export function OverviewTab({ project }: OverviewProps) {
   const dragCol = useRef<TaskCol | null>(null);
 
   // Chat
-  const [messages, setMessages] = useState<Msg[]>([]);
   const [sendingMsg, setSendingMsg] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
 
@@ -66,34 +63,25 @@ export function OverviewTab({ project }: OverviewProps) {
   const [inviting, setInviting] = useState(false);
   const [inviteResult, setInviteResult] = useState("");
 
+  const { data: tasks = [] } = useProjectTasks(project.id);
+  const { data: messages = [] } = useMessages(project.id);
+  const createTaskMutation = useCreateTask();
+  const updateTaskMutation = useUpdateTask();
+  const sendMessageMutation = useSendMessage();
+  const inviteMutation = useInviteMember();
+  const deleteProjectMutation = useDeleteProject();
+
   useEffect(() => {
-    loadTasks();
-    loadMessages();
-  }, [project.id]);
-
-  const loadTasks = async () => {
-    try {
-      const data = await getTasksByProject(project.id);
-      setTasks(data.tasks || []);
-    } catch { /* empty */ }
-  };
-
-  const loadMessages = async () => {
-    try {
-      const data = await getMessages(project.id);
-      setMessages(data.messages || []);
-      setTimeout(() => chatRef.current?.scrollTo(0, chatRef.current.scrollHeight), 50);
-    } catch { /* empty */ }
-  };
+    chatRef.current?.scrollTo(0, chatRef.current.scrollHeight);
+  }, [messages]);
 
   const handleCreateTask = async () => {
     if (!newTaskTitle.trim()) return;
     setCreatingTask(true);
     try {
-      await createTask({ project_id: project.id, title: newTaskTitle.trim() });
+      await createTaskMutation.mutateAsync({ project_id: project.id, title: newTaskTitle.trim() });
       setNewTaskTitle("");
       setShowTaskForm(false);
-      loadTasks();
     } catch { /* empty */ }
     setCreatingTask(false);
   };
@@ -102,18 +90,16 @@ export function OverviewTab({ project }: OverviewProps) {
     if (!dragId.current || !dragCol.current) return;
     const id = dragId.current;
     const newStatus = dragCol.current;
-    setTasks(t => t.map(task => task.id === id ? { ...task, status: newStatus } : task));
-    try { await updateTask(id, { status: newStatus }); } catch { loadTasks(); }
     dragId.current = null; dragCol.current = null;
+    try { await updateTaskMutation.mutateAsync({ id, data: { status: newStatus } }); } catch { /* empty */ }
   };
 
   const handleSendMsg = async () => {
     if (!msgInput.trim()) return;
     setSendingMsg(true);
     try {
-      await sendMessage({ project_id: project.id, content: msgInput.trim() });
+      await sendMessageMutation.mutateAsync({ project_id: project.id, content: msgInput.trim() });
       setMsgInput("");
-      loadMessages();
     } catch { /* empty */ }
     setSendingMsg(false);
   };
@@ -123,7 +109,7 @@ export function OverviewTab({ project }: OverviewProps) {
     setInviting(true);
     setInviteResult("");
     try {
-      await inviteMember({ email: inviteEmail.trim(), project_id: project.id, role: inviteRole });
+      await inviteMutation.mutateAsync({ email: inviteEmail.trim(), project_id: project.id, role: inviteRole });
       setInviteResult("Приглашение отправлено!");
       setInviteEmail("");
     } catch (err: unknown) {
@@ -317,7 +303,7 @@ export function OverviewTab({ project }: OverviewProps) {
             <p className="text-stone-mid text-sm text-center mb-6">Проект «{project.title}» и все данные будут удалены безвозвратно.</p>
             <div className="flex gap-3">
               <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-2.5 rounded-xl border border-border text-stone-mid text-sm font-medium hover:bg-muted transition-colors">Отмена</button>
-              <button onClick={async () => { setDeleting(true); try { await deleteProject(project.id); navigate("/dashboard"); } catch { setDeleting(false); setShowDeleteConfirm(false); } }} disabled={deleting} className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-medium hover:bg-red-600 disabled:opacity-60">
+              <button onClick={async () => { setDeleting(true); try { await deleteProjectMutation.mutateAsync(project.id); navigate("/dashboard"); } catch { setDeleting(false); setShowDeleteConfirm(false); } }} disabled={deleting} className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-medium hover:bg-red-600 disabled:opacity-60">
                 {deleting ? "Удаляем..." : "Удалить"}
               </button>
             </div>

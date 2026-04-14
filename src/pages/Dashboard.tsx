@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Icon from "@/components/ui/icon";
 import { useAuth } from "@/lib/auth";
-import { getProjects, createProject } from "@/lib/api";
+import { useProjects, useCreateProject } from "@/lib/queries";
 
 interface Project {
   id: string;
@@ -42,8 +42,6 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { user, logout, loading: authLoading } = useAuth();
   const [activeNav, setActiveNav] = useState("dashboard");
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loadingProjects, setLoadingProjects] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [creating, setCreating] = useState(false);
 
@@ -56,34 +54,19 @@ export default function Dashboard() {
   const [newStyle, setNewStyle] = useState("");
   const [newBudget, setNewBudget] = useState("");
 
-  useEffect(() => {
-    if (!authLoading && !user) {
-      navigate("/login");
-      return;
-    }
-    if (user) {
-      loadProjects();
-    }
-  }, [user, authLoading]);
+  const { data: projects = [], isLoading: loadingProjects } = useProjects(!!user);
+  const createProjectMutation = useCreateProject();
 
-  const loadProjects = async () => {
-    try {
-      const data = await getProjects();
-      setProjects(data.projects || []);
-    } catch (err) {
-      console.error("Failed to load projects:", err);
-    } finally {
-      setLoadingProjects(false);
-    }
-  };
+  useEffect(() => {
+    if (!authLoading && !user) navigate("/login");
+  }, [user, authLoading]);
 
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
     setCreating(true);
-
     try {
-      await createProject({
+      await createProjectMutation.mutateAsync({
         title: newTitle,
         description: newDescription || undefined,
         address: newAddress || undefined,
@@ -92,7 +75,6 @@ export default function Dashboard() {
         style: newStyle || undefined,
         budget: newBudget ? parseFloat(newBudget) : undefined,
       });
-
       setShowCreateModal(false);
       setNewTitle("");
       setNewDescription("");
@@ -101,7 +83,6 @@ export default function Dashboard() {
       setNewRooms("");
       setNewStyle("");
       setNewBudget("");
-      loadProjects();
     } catch (err) {
       console.error("Failed to create project:", err);
     } finally {

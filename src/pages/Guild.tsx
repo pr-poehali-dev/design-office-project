@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Icon from "@/components/ui/icon";
 import { useAuth } from "@/lib/auth";
-import { getDesigners } from "@/lib/api";
+import { useDesigners } from "@/lib/queries";
 
 interface Designer {
   id: string;
@@ -88,28 +88,13 @@ export default function Guild() {
   const [specFilter, setSpecFilter] = useState("");
   const [cityFilter, setCityFilter] = useState("Все города");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [designers, setDesigners] = useState<Designer[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadDesigners();
-  }, [specFilter, cityFilter, search]);
-
-  const loadDesigners = async () => {
-    setLoading(true);
-    try {
-      const data = await getDesigners({
-        specialization: specFilter || undefined,
-        city: cityFilter === "Все города" ? undefined : cityFilter,
-        search: search || undefined,
-      });
-      setDesigners(data.designers || []);
-    } catch (err) {
-      console.error("Failed to load designers:", err);
-    } finally {
-      setLoading(false);
-    }
+  const params = {
+    specialization: specFilter || undefined,
+    city: cityFilter === "Все города" ? undefined : cityFilter,
+    search: search || undefined,
   };
+  const { data: designers = [], isLoading: loading } = useDesigners(params);
 
   const handleLogout = () => {
     logout();
