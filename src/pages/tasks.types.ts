@@ -1,18 +1,20 @@
 export type Priority = "high" | "medium" | "low";
-export type TaskStatus = "todo" | "doing" | "review" | "done";
+export type TaskStatus = "todo" | "in_progress" | "review" | "done";
 
 export interface Task {
-  id: number;
+  id: string;
   title: string;
-  project: string;
+  project_id: string;
+  project_title: string;
   priority: Priority;
-  deadline: string;
-  deadlineDate: string;
+  deadline: string | null;
   status: TaskStatus;
-  assignee: string;
+  assigned_to: string | null;
+  assigned_first_name: string | null;
+  assigned_last_name: string | null;
+  description: string | null;
+  created_at: string;
 }
-
-export const PROJECT_COLORS: Record<string, string> = {};
 
 export const PRIORITY_CONFIG: Record<Priority, { label: string; color: string; dot: string }> = {
   high: { label: "Высокий", color: "text-red-600", dot: "bg-red-500" },
@@ -22,7 +24,7 @@ export const PRIORITY_CONFIG: Record<Priority, { label: string; color: string; d
 
 export const STATUS_LABELS: Record<TaskStatus, string> = {
   todo: "К выполнению",
-  doing: "В работе",
+  in_progress: "В работе",
   review: "На проверке",
   done: "Готово",
 };
@@ -37,4 +39,12 @@ export const NAV_ITEMS = [
   { icon: "User", label: "Профиль", id: "profile", path: "/dashboard" },
 ];
 
-export const INIT_TASKS: Task[] = [];
+export function formatDeadline(d: string | null): string {
+  if (!d) return "—";
+  return new Date(d).toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
+}
+
+export function getAssigneeInitials(task: Task): string {
+  if (!task.assigned_first_name) return "?";
+  return `${(task.assigned_first_name[0] || "").toUpperCase()}${(task.assigned_last_name?.[0] || "").toUpperCase()}`;
+}

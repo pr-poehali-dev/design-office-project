@@ -144,6 +144,14 @@ export async function getTasksByProject(projectId: string) {
   return handleResponse(res);
 }
 
+export async function getAllTasks() {
+  const res = await fetch(API_URLS.tasks, {
+    method: "GET",
+    headers: authHeaders(),
+  });
+  return handleResponse(res);
+}
+
 export async function createTask(data: {
   project_id: string;
   title: string;

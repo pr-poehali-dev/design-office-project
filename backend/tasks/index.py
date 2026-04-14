@@ -131,25 +131,41 @@ def check_project_access(user, project_id):
 
 def handle_list_tasks(qsp, user):
     project_id = qsp.get("project_id")
-    if not project_id:
-        return error_response("project_id query parameter is required", 400)
-
-    project, err = check_project_access(user, project_id)
-    if err:
-        return err
 
     conn = get_connection()
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(
-                f"""SELECT t.*, u.first_name AS assigned_first_name,
-                           u.last_name AS assigned_last_name
-                    FROM {SCHEMA}.tasks t
-                    LEFT JOIN {SCHEMA}.users u ON u.id = t.assigned_to
-                    WHERE t.project_id = %s
-                    ORDER BY t.created_at DESC""",
-                (project_id,),
-            )
+            if project_id:
+                project, err = check_project_access(user, project_id)
+                if err:
+                    return err
+                cur.execute(
+                    f"""SELECT t.*, u.first_name AS assigned_first_name,
+                               u.last_name AS assigned_last_name,
+                               p.title AS project_title
+                        FROM {SCHEMA}.tasks t
+                        LEFT JOIN {SCHEMA}.users u ON u.id = t.assigned_to
+                        LEFT JOIN {SCHEMA}.projects p ON p.id = t.project_id
+                        WHERE t.project_id = %s
+                        ORDER BY t.created_at DESC""",
+                    (project_id,),
+                )
+            else:
+                cur.execute(
+                    f"""SELECT t.*, u.first_name AS assigned_first_name,
+                               u.last_name AS assigned_last_name,
+                               p.title AS project_title
+                        FROM {SCHEMA}.tasks t
+                        LEFT JOIN {SCHEMA}.users u ON u.id = t.assigned_to
+                        LEFT JOIN {SCHEMA}.projects p ON p.id = t.project_id
+                        WHERE t.project_id IN (
+                            SELECT id FROM {SCHEMA}.projects WHERE designer_id = %s
+                            UNION
+                            SELECT project_id FROM {SCHEMA}.project_members WHERE user_id = %s AND accepted = true
+                        )
+                        ORDER BY t.created_at DESC""",
+                    (str(user["id"]), str(user["id"])),
+                )
             rows = cur.fetchall()
 
         return json_response({"tasks": [dict(r) for r in rows]})
