@@ -42,12 +42,13 @@ const PROJECTS = [
 ];
 
 const NAV_ITEMS = [
-  { icon: "LayoutDashboard", label: "Дашборд", id: "dashboard" },
-  { icon: "FolderOpen", label: "Проекты", id: "projects" },
-  { icon: "Users", label: "Клиенты", id: "clients" },
-  { icon: "FileText", label: "Документы", id: "docs" },
-  { icon: "MessageCircle", label: "Сообщения", id: "messages", badge: 3 },
-  { icon: "User", label: "Профиль", id: "profile" },
+  { icon: "LayoutDashboard", label: "Дашборд", id: "dashboard", path: "" },
+  { icon: "FolderOpen", label: "Проекты", id: "projects", path: "" },
+  { icon: "CheckSquare", label: "Задачи", id: "tasks", path: "/tasks" },
+  { icon: "Users", label: "Клиенты", id: "clients", path: "" },
+  { icon: "Handshake", label: "Гильдия", id: "guild", path: "/guild" },
+  { icon: "MessageCircle", label: "Сообщения", id: "messages", path: "", badge: 3 },
+  { icon: "User", label: "Профиль", id: "profile", path: "" },
 ];
 
 export default function Dashboard() {
@@ -85,7 +86,7 @@ export default function Dashboard() {
           {NAV_ITEMS.map((item) => (
             <button
               key={item.id}
-              onClick={() => setActiveNav(item.id)}
+              onClick={() => item.path ? navigate(item.path) : setActiveNav(item.id)}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all ${
                 activeNav === item.id
                   ? "bg-terra-pale text-terra font-medium"
@@ -115,16 +116,16 @@ export default function Dashboard() {
       </aside>
 
       {/* Mobile bottom nav */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-border px-2 py-2 flex justify-around">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-border px-1 py-2 flex justify-around">
         {NAV_ITEMS.slice(0, 5).map((item) => (
           <button
             key={item.id}
-            onClick={() => setActiveNav(item.id)}
-            className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all relative ${
+            onClick={() => item.path ? navigate(item.path) : setActiveNav(item.id)}
+            className={`flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-xl transition-all relative ${
               activeNav === item.id ? "text-terra" : "text-stone-light"
             }`}
           >
-            <Icon name={item.icon} fallback="Circle" size={20} />
+            <Icon name={item.icon} fallback="Circle" size={19} />
             <span className="text-xs">{item.label}</span>
             {item.badge && (
               <span className="absolute -top-0.5 right-1 w-4 h-4 terra-gradient rounded-full text-white text-xs flex items-center justify-center">
@@ -143,7 +144,9 @@ export default function Dashboard() {
             <h1 className="font-display text-3xl md:text-4xl font-light text-stone">
               {activeNav === "dashboard" && "Обзор"}
               {activeNav === "projects" && "Проекты"}
+              {activeNav === "tasks" && "Задачи"}
               {activeNav === "clients" && "Клиенты"}
+              {activeNav === "guild" && "Гильдия"}
               {activeNav === "docs" && "Документы"}
               {activeNav === "messages" && "Сообщения"}
               {activeNav === "profile" && "Профиль"}

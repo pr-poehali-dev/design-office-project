@@ -854,11 +854,13 @@ function DocsTab() {
 
 // ─── NAV (same as Dashboard) ──────────────────────────────────────────────────
 const NAV_ITEMS = [
-  { icon: "LayoutDashboard", label: "Дашборд", id: "dashboard" },
-  { icon: "FolderOpen", label: "Проекты", id: "projects" },
-  { icon: "Users", label: "Клиенты", id: "clients" },
-  { icon: "FileText", label: "Документы", id: "docs" },
-  { icon: "MessageCircle", label: "Сообщения", id: "messages", badge: 3 },
+  { icon: "LayoutDashboard", label: "Дашборд", id: "dashboard", path: "/dashboard" },
+  { icon: "FolderOpen", label: "Проекты", id: "projects", path: "/dashboard" },
+  { icon: "CheckSquare", label: "Задачи", id: "tasks", path: "/tasks" },
+  { icon: "Users", label: "Клиенты", id: "clients", path: "/dashboard" },
+  { icon: "Handshake", label: "Гильдия", id: "guild", path: "/guild" },
+  { icon: "MessageCircle", label: "Сообщения", id: "messages", path: "/dashboard", badge: 3 },
+  { icon: "User", label: "Профиль", id: "profile", path: "/dashboard" },
 ];
 
 const TABS = [
@@ -877,9 +879,9 @@ export default function ProjectDetail() {
   const [activeTab, setActiveTab] = useState("overview");
   const [activeNav, setActiveNav] = useState("projects");
 
-  const handleNavClick = (navId: string) => {
-    setActiveNav(navId);
-    navigate("/dashboard");
+  const handleNavClick = (item: { id: string; path: string }) => {
+    setActiveNav(item.id);
+    navigate(item.path);
   };
 
   return (
@@ -908,7 +910,7 @@ export default function ProjectDetail() {
           {NAV_ITEMS.map(item => (
             <button
               key={item.id}
-              onClick={() => handleNavClick(item.id)}
+              onClick={() => handleNavClick(item)}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all ${
                 activeNav === item.id ? "bg-terra-pale text-terra font-medium" : "text-stone-mid hover:bg-muted hover:text-stone"
               }`}
@@ -984,11 +986,11 @@ export default function ProjectDetail() {
       </main>
 
       {/* Mobile bottom nav */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-border px-2 py-2 flex justify-around">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-border px-1 py-2 flex justify-around">
         {NAV_ITEMS.slice(0, 5).map(item => (
           <button
             key={item.id}
-            onClick={() => handleNavClick(item.id)}
+            onClick={() => handleNavClick(item)}
             className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all relative ${
               activeNav === item.id ? "text-terra" : "text-stone-light"
             }`}
