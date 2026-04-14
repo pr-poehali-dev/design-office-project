@@ -2,6 +2,8 @@ const API_URLS = {
   auth: "https://functions.poehali.dev/5f9050c7-55f5-4006-b7c8-ae19d93f9160",
   projects: "https://functions.poehali.dev/354a783a-eed5-46be-811e-db5f09633e08",
   designers: "https://functions.poehali.dev/bfe179cb-2802-48ba-94bc-ede7fea2ab25",
+  tasks: "https://functions.poehali.dev/a3b72923-93e5-4052-8d6a-7c879d1621cc",
+  messages: "https://functions.poehali.dev/1bb1fc89-5192-4068-8f31-750a8936c19c",
 };
 
 function getToken(): string | null {
@@ -129,6 +131,67 @@ export async function deleteProject(id: string) {
   const res = await fetch(`${API_URLS.projects}?id=${id}`, {
     method: "DELETE",
     headers: authHeaders(),
+  });
+  return handleResponse(res);
+}
+
+// Tasks
+export async function getTasksByProject(projectId: string) {
+  const res = await fetch(`${API_URLS.tasks}?project_id=${projectId}`, {
+    method: "GET",
+    headers: authHeaders(),
+  });
+  return handleResponse(res);
+}
+
+export async function createTask(data: {
+  project_id: string;
+  title: string;
+  description?: string;
+  priority?: string;
+  deadline?: string;
+  stage_id?: string;
+  assigned_to?: string;
+}) {
+  const res = await fetch(API_URLS.tasks, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+  return handleResponse(res);
+}
+
+export async function updateTask(id: string, data: Record<string, unknown>) {
+  const res = await fetch(`${API_URLS.tasks}?id=${id}`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+  return handleResponse(res);
+}
+
+export async function deleteTask(id: string) {
+  const res = await fetch(`${API_URLS.tasks}?id=${id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  return handleResponse(res);
+}
+
+// Messages
+export async function getMessages(projectId: string) {
+  const res = await fetch(`${API_URLS.messages}?project_id=${projectId}`, {
+    method: "GET",
+    headers: authHeaders(),
+  });
+  return handleResponse(res);
+}
+
+export async function sendMessage(data: { project_id: string; content: string }) {
+  const res = await fetch(API_URLS.messages, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(data),
   });
   return handleResponse(res);
 }

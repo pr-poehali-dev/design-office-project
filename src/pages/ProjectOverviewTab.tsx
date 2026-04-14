@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import Icon from "@/components/ui/icon";
 import { fmtMoney } from "./projectDetail.types";
+import { getTasksByProject, createTask, updateTask, getMessages, sendMessage, inviteMember } from "@/lib/api";
 import { deleteProject } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import type { ProjectData } from "./ProjectDetail";
 
 const STATUS_MAP: Record<string, { label: string; color: string }> = {
@@ -18,21 +20,19 @@ const STAGE_STATUS_MAP: Record<string, { label: string; color: string; icon: str
   pending: { label: "Ожидает", color: "bg-stone/5 text-stone-mid border-border", icon: "⏳" },
 };
 
+type TaskCol = "todo" | "in_progress" | "review" | "done";
+interface TaskItem { id: string; title: string; status: TaskCol; priority: string; }
+interface Msg { id: string; content: string; sender_id: string; sender_first_name: string; sender_last_name: string; created_at: string; }
+
+const COL_LABELS: Record<TaskCol, string> = { todo: "К выполнению", in_progress: "В работе", review: "На проверке", done: "Готово" };
+
 function formatDate(d?: string) {
   if (!d) return "—";
   return new Date(d).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" });
 }
 
-function EmptyBlock({ icon, title, subtitle }: { icon: string; title: string; subtitle: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-6 text-center">
-      <div className="w-10 h-10 bg-muted rounded-xl flex items-center justify-center mb-2">
-        <Icon name={icon} fallback="Circle" size={18} className="text-stone-light" />
-      </div>
-      <p className="text-xs font-medium text-stone-mid">{title}</p>
-      <p className="text-xs text-stone-light mt-0.5">{subtitle}</p>
-    </div>
-  );
+function formatTime(d: string) {
+  return new Date(d).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
 }
 
 interface OverviewProps {
@@ -41,12 +41,98 @@ interface OverviewProps {
 
 export function OverviewTab({ project }: OverviewProps) {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [msgInput, setMsgInput] = useState("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  const statusInfo = STATUS_MAP[project.status] || STATUS_MAP.draft;
+  // Tasks
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
+  const [showTaskForm, setShowTaskForm] = useState(false);
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [creatingTask, setCreatingTask] = useState(false);
+  const dragId = useRef<string | null>(null);
+  const dragCol = useRef<TaskCol | null>(null);
 
+  // Chat
+  const [messages, setMessages] = useState<Msg[]>([]);
+  const [sendingMsg, setSendingMsg] = useState(false);
+  const chatRef = useRef<HTMLDivElement>(null);
+
+  // Invite
+  const [showInvite, setShowInvite] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("client");
+  const [inviting, setInviting] = useState(false);
+  const [inviteResult, setInviteResult] = useState("");
+
+  useEffect(() => {
+    loadTasks();
+    loadMessages();
+  }, [project.id]);
+
+  const loadTasks = async () => {
+    try {
+      const data = await getTasksByProject(project.id);
+      setTasks(data.tasks || []);
+    } catch { /* empty */ }
+  };
+
+  const loadMessages = async () => {
+    try {
+      const data = await getMessages(project.id);
+      setMessages(data.messages || []);
+      setTimeout(() => chatRef.current?.scrollTo(0, chatRef.current.scrollHeight), 50);
+    } catch { /* empty */ }
+  };
+
+  const handleCreateTask = async () => {
+    if (!newTaskTitle.trim()) return;
+    setCreatingTask(true);
+    try {
+      await createTask({ project_id: project.id, title: newTaskTitle.trim() });
+      setNewTaskTitle("");
+      setShowTaskForm(false);
+      loadTasks();
+    } catch { /* empty */ }
+    setCreatingTask(false);
+  };
+
+  const handleDrop = async () => {
+    if (!dragId.current || !dragCol.current) return;
+    const id = dragId.current;
+    const newStatus = dragCol.current;
+    setTasks(t => t.map(task => task.id === id ? { ...task, status: newStatus } : task));
+    try { await updateTask(id, { status: newStatus }); } catch { loadTasks(); }
+    dragId.current = null; dragCol.current = null;
+  };
+
+  const handleSendMsg = async () => {
+    if (!msgInput.trim()) return;
+    setSendingMsg(true);
+    try {
+      await sendMessage({ project_id: project.id, content: msgInput.trim() });
+      setMsgInput("");
+      loadMessages();
+    } catch { /* empty */ }
+    setSendingMsg(false);
+  };
+
+  const handleInvite = async () => {
+    if (!inviteEmail.trim()) return;
+    setInviting(true);
+    setInviteResult("");
+    try {
+      await inviteMember({ email: inviteEmail.trim(), project_id: project.id, role: inviteRole });
+      setInviteResult("Приглашение отправлено!");
+      setInviteEmail("");
+    } catch (err: unknown) {
+      setInviteResult(err instanceof Error ? err.message : "Ошибка");
+    }
+    setInviting(false);
+  };
+
+  const statusInfo = STATUS_MAP[project.status] || STATUS_MAP.draft;
   const clientMember = project.members?.find(m => m.role === "client");
   const clientName = clientMember ? `${clientMember.first_name || ""} ${clientMember.last_name || ""}`.trim() : null;
 
@@ -62,6 +148,7 @@ export function OverviewTab({ project }: OverviewProps) {
 
   return (
     <div className="space-y-6">
+      {/* Project info */}
       <div className="bg-white rounded-2xl border border-border p-5 md:p-6">
         <div className="flex flex-wrap items-start justify-between gap-4 mb-5">
           <div>
@@ -69,9 +156,7 @@ export function OverviewTab({ project }: OverviewProps) {
               <h2 className="font-display text-2xl font-light text-stone">{project.title}</h2>
               <span className={`text-xs px-2.5 py-1 rounded-full border font-medium ${statusInfo.color}`}>{statusInfo.label}</span>
             </div>
-            {project.description && (
-              <p className="text-sm text-stone-mid mb-3">{project.description}</p>
-            )}
+            {project.description && <p className="text-sm text-stone-mid mb-3">{project.description}</p>}
             {infoRows.length > 0 && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-2 text-sm">
                 {infoRows.map(([k, v]) => (
@@ -84,120 +169,155 @@ export function OverviewTab({ project }: OverviewProps) {
             )}
           </div>
           <div className="flex gap-2 flex-shrink-0">
-            <button className="flex items-center gap-1.5 text-sm px-3.5 py-2 rounded-xl border border-border text-stone hover:border-terra/40 transition-all">
-              <Icon name="Pencil" size={14} /> Редактировать
-            </button>
-            <button className="flex items-center gap-1.5 text-sm px-3.5 py-2 rounded-xl terra-gradient text-white hover:opacity-90 transition-all">
+            <button onClick={() => setShowInvite(true)} className="flex items-center gap-1.5 text-sm px-3.5 py-2 rounded-xl terra-gradient text-white hover:opacity-90 transition-all">
               <Icon name="UserPlus" size={14} className="text-white" /> Пригласить
             </button>
-            <button
-              onClick={() => setShowDeleteConfirm(true)}
-              className="flex items-center gap-1.5 text-sm px-3.5 py-2 rounded-xl border border-red-200 text-red-500 hover:bg-red-50 hover:border-red-300 transition-all"
-            >
+            <button onClick={() => setShowDeleteConfirm(true)} className="flex items-center gap-1.5 text-sm px-3.5 py-2 rounded-xl border border-red-200 text-red-500 hover:bg-red-50 transition-all">
               <Icon name="Trash2" size={14} />
             </button>
           </div>
         </div>
       </div>
 
+      {/* 3 widgets */}
       <div className="grid md:grid-cols-3 gap-5">
-        {/* Finance widget */}
+        {/* Finance */}
         <div className="bg-white rounded-2xl border border-border p-5">
           <div className="flex items-center gap-2 mb-4">
-            <div className="w-7 h-7 terra-gradient rounded-lg flex items-center justify-center">
-              <Icon name="Wallet" size={13} className="text-white" />
-            </div>
+            <div className="w-7 h-7 terra-gradient rounded-lg flex items-center justify-center"><Icon name="Wallet" size={13} className="text-white" /></div>
             <span className="font-semibold text-stone text-sm">Финансы</span>
           </div>
           <div className="space-y-2.5 mb-4">
-            {[
-              ["Стоимость", project.budget || 0, "text-stone"],
-              ["Оплачено", 0, "text-green-600"],
-              ["Осталось", project.budget || 0, "text-amber-600"],
-            ].map(([label, val, cls]) => (
-              <div key={label as string} className="flex justify-between items-center">
-                <span className="text-xs text-stone-mid">{label as string}</span>
-                <span className={`text-sm font-semibold ${cls}`}>{fmtMoney(val as number)}</span>
+            {([["Стоимость", project.budget || 0, "text-stone"], ["Оплачено", 0, "text-green-600"], ["Осталось", project.budget || 0, "text-amber-600"]] as [string, number, string][]).map(([label, val, cls]) => (
+              <div key={label} className="flex justify-between items-center">
+                <span className="text-xs text-stone-mid">{label}</span>
+                <span className={`text-sm font-semibold ${cls}`}>{fmtMoney(val)}</span>
               </div>
             ))}
           </div>
-          <div className="h-2 bg-muted rounded-full overflow-hidden">
-            <div className="h-full bg-green-400 rounded-full" style={{ width: "0%" }} />
-          </div>
-          <div className="flex justify-between mt-1">
-            <span className="text-xs text-stone-light">Оплачено</span>
-            <span className="text-xs font-medium text-stone">0%</span>
-          </div>
+          <div className="h-2 bg-muted rounded-full overflow-hidden"><div className="h-full bg-green-400 rounded-full" style={{ width: "0%" }} /></div>
         </div>
 
-        {/* Tasks widget — empty */}
+        {/* Tasks kanban */}
         <div className="bg-white rounded-2xl border border-border p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-7 h-7 terra-gradient rounded-lg flex items-center justify-center">
-              <Icon name="CheckSquare" fallback="Layout" size={13} className="text-white" />
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 terra-gradient rounded-lg flex items-center justify-center"><Icon name="CheckSquare" size={13} className="text-white" /></div>
+              <span className="font-semibold text-stone text-sm">Задачи</span>
             </div>
-            <span className="font-semibold text-stone text-sm">Задачи</span>
+            <button onClick={() => setShowTaskForm(true)} className="text-xs text-terra hover:underline">+ Добавить</button>
           </div>
-          <EmptyBlock icon="ListTodo" title="Задач пока нет" subtitle="Создайте первую задачу" />
+
+          {showTaskForm && (
+            <div className="mb-3 flex gap-2">
+              <input value={newTaskTitle} onChange={e => setNewTaskTitle(e.target.value)} placeholder="Название задачи..." onKeyDown={e => e.key === "Enter" && handleCreateTask()} className="flex-1 px-2.5 py-1.5 rounded-lg border border-border bg-background text-xs text-stone focus:outline-none focus:ring-1 focus:ring-terra/30" autoFocus />
+              <button onClick={handleCreateTask} disabled={creatingTask} className="terra-gradient text-white px-2.5 py-1.5 rounded-lg text-xs disabled:opacity-50">
+                {creatingTask ? "..." : "OK"}
+              </button>
+              <button onClick={() => { setShowTaskForm(false); setNewTaskTitle(""); }} className="text-stone-light text-xs px-1">✕</button>
+            </div>
+          )}
+
+          {tasks.length === 0 && !showTaskForm ? (
+            <div className="flex flex-col items-center py-6 text-center">
+              <div className="w-10 h-10 bg-muted rounded-xl flex items-center justify-center mb-2"><Icon name="ListTodo" size={18} className="text-stone-light" /></div>
+              <p className="text-xs text-stone-mid">Задач пока нет</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-1.5">
+              {(["todo", "in_progress", "review", "done"] as TaskCol[]).map(col => (
+                <div key={col} onDragOver={e => { e.preventDefault(); dragCol.current = col; }} onDrop={handleDrop} className="min-h-[40px]">
+                  <div className="text-xs text-stone-light font-medium mb-1 text-center truncate">{COL_LABELS[col]}</div>
+                  <div className="space-y-1">
+                    {tasks.filter(t => t.status === col).map(task => (
+                      <div key={task.id} draggable onDragStart={() => { dragId.current = task.id; }} className="bg-background border border-border rounded-lg px-2 py-1 text-xs text-stone cursor-grab active:cursor-grabbing hover:border-terra/30 transition-all select-none truncate">
+                        {task.title}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Chat widget — empty */}
+        {/* Chat */}
         <div className="bg-white rounded-2xl border border-border p-5 flex flex-col">
           <div className="flex items-center gap-2 mb-3">
-            <div className="w-7 h-7 terra-gradient rounded-lg flex items-center justify-center">
-              <Icon name="MessageCircle" size={13} className="text-white" />
-            </div>
+            <div className="w-7 h-7 terra-gradient rounded-lg flex items-center justify-center"><Icon name="MessageCircle" size={13} className="text-white" /></div>
             <span className="font-semibold text-stone text-sm">Чат</span>
           </div>
-          <div className="flex-1 mb-3">
-            <EmptyBlock icon="MessagesSquare" title="Нет сообщений" subtitle="Пригласите участников для общения" />
+
+          <div ref={chatRef} className="flex-1 space-y-2 overflow-y-auto max-h-44 mb-3">
+            {messages.length === 0 ? (
+              <div className="flex flex-col items-center py-6 text-center">
+                <div className="w-10 h-10 bg-muted rounded-xl flex items-center justify-center mb-2"><Icon name="MessagesSquare" size={18} className="text-stone-light" /></div>
+                <p className="text-xs text-stone-mid">Нет сообщений</p>
+              </div>
+            ) : messages.map(msg => {
+              const isMe = msg.sender_id === user?.id;
+              return (
+                <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+                  <div className={`max-w-[80%] rounded-xl px-2.5 py-1.5 ${isMe ? "terra-gradient" : "bg-muted"}`}>
+                    {!isMe && <p className="text-xs font-semibold mb-0.5" style={{ color: isMe ? "white" : "#3D3028" }}>{msg.sender_first_name}</p>}
+                    <p className={`text-xs ${isMe ? "text-white" : "text-stone"}`}>{msg.content}</p>
+                    <p className={`text-xs mt-0.5 ${isMe ? "text-white/60" : "text-stone-light"}`}>{formatTime(msg.created_at)}</p>
+                  </div>
+                </div>
+              );
+            })}
           </div>
+
           <div className="flex gap-2">
-            <input
-              value={msgInput}
-              onChange={e => setMsgInput(e.target.value)}
-              placeholder="Сообщение..."
-              className="flex-1 px-3 py-2 rounded-xl border border-border bg-background text-stone text-xs focus:outline-none focus:ring-2 focus:ring-terra/20 focus:border-terra"
-            />
-            <button onClick={() => setMsgInput("")} className="terra-gradient text-white p-2 rounded-xl hover:opacity-90 transition-opacity">
+            <input value={msgInput} onChange={e => setMsgInput(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSendMsg()} placeholder="Сообщение..." className="flex-1 px-3 py-2 rounded-xl border border-border bg-background text-stone text-xs focus:outline-none focus:ring-2 focus:ring-terra/20 focus:border-terra" />
+            <button onClick={handleSendMsg} disabled={sendingMsg} className="terra-gradient text-white p-2 rounded-xl hover:opacity-90 transition-opacity disabled:opacity-50">
               <Icon name="Send" size={13} className="text-white" />
             </button>
           </div>
         </div>
       </div>
 
+      {/* Invite modal */}
+      {showInvite && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 animate-scale-in">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-display text-xl text-stone">Пригласить участника</h3>
+              <button onClick={() => { setShowInvite(false); setInviteResult(""); }} className="p-1.5 hover:bg-muted rounded-lg"><Icon name="X" size={16} className="text-stone-mid" /></button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-stone-light mb-1 block">Email участника</label>
+                <input value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} placeholder="client@email.com" className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20 focus:border-terra" />
+              </div>
+              <div>
+                <label className="text-xs text-stone-light mb-1 block">Роль</label>
+                <select value={inviteRole} onChange={e => setInviteRole(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20">
+                  <option value="client">Клиент</option>
+                  <option value="worker">Работник</option>
+                </select>
+              </div>
+              {inviteResult && (
+                <p className={`text-xs ${inviteResult.includes("отправлено") ? "text-green-600" : "text-red-500"}`}>{inviteResult}</p>
+              )}
+              <button onClick={handleInvite} disabled={inviting} className="w-full terra-gradient text-white py-2.5 rounded-xl text-sm font-medium hover:opacity-90 disabled:opacity-50">
+                {inviting ? "Отправляем..." : "Пригласить"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirm */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 animate-scale-in">
-            <div className="w-12 h-12 bg-red-50 rounded-xl flex items-center justify-center mx-auto mb-4">
-              <Icon name="Trash2" size={22} className="text-red-500" />
-            </div>
+            <div className="w-12 h-12 bg-red-50 rounded-xl flex items-center justify-center mx-auto mb-4"><Icon name="Trash2" size={22} className="text-red-500" /></div>
             <h3 className="font-display text-xl text-stone text-center mb-2">Удалить проект?</h3>
-            <p className="text-stone-mid text-sm text-center mb-6">
-              Проект «{project.title}» и все связанные данные будут удалены безвозвратно.
-            </p>
+            <p className="text-stone-mid text-sm text-center mb-6">Проект «{project.title}» и все данные будут удалены безвозвратно.</p>
             <div className="flex gap-3">
-              <button
-                onClick={() => setShowDeleteConfirm(false)}
-                className="flex-1 py-2.5 rounded-xl border border-border text-stone-mid text-sm font-medium hover:bg-muted transition-colors"
-              >
-                Отмена
-              </button>
-              <button
-                onClick={async () => {
-                  setDeleting(true);
-                  try {
-                    await deleteProject(project.id);
-                    navigate("/dashboard");
-                  } catch (err) {
-                    console.error("Delete failed:", err);
-                    setDeleting(false);
-                    setShowDeleteConfirm(false);
-                  }
-                }}
-                disabled={deleting}
-                className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-medium hover:bg-red-600 transition-colors disabled:opacity-60"
-              >
+              <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-2.5 rounded-xl border border-border text-stone-mid text-sm font-medium hover:bg-muted transition-colors">Отмена</button>
+              <button onClick={async () => { setDeleting(true); try { await deleteProject(project.id); navigate("/dashboard"); } catch { setDeleting(false); setShowDeleteConfirm(false); } }} disabled={deleting} className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-medium hover:bg-red-600 disabled:opacity-60">
                 {deleting ? "Удаляем..." : "Удалить"}
               </button>
             </div>
@@ -208,28 +328,19 @@ export function OverviewTab({ project }: OverviewProps) {
   );
 }
 
-interface ExecutionProps {
-  project: ProjectData;
-}
+interface ExecutionProps { project: ProjectData; }
 
 export function ExecutionTab({ project }: ExecutionProps) {
   const stages = project.stages || [];
-  const [openStage, setOpenStage] = useState<string | null>(
-    stages.find(s => s.status === "in_progress")?.id || stages[0]?.id || null
-  );
+  const [openStage, setOpenStage] = useState<string | null>(stages.find(s => s.status === "in_progress")?.id || stages[0]?.id || null);
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
 
   if (stages.length === 0) {
     return (
       <div className="bg-white rounded-2xl border border-border p-12 text-center">
-        <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
-          <Icon name="ListChecks" size={28} className="text-stone-light" />
-        </div>
+        <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4"><Icon name="ListChecks" size={28} className="text-stone-light" /></div>
         <h3 className="font-display text-xl text-stone mb-2">Нет этапов</h3>
         <p className="text-stone-mid text-sm mb-6">Добавьте первый этап проекта</p>
-        <button className="terra-gradient text-white font-medium px-6 py-3 rounded-xl hover:opacity-90 transition-all text-sm">
-          Добавить этап
-        </button>
       </div>
     );
   }
@@ -240,64 +351,35 @@ export function ExecutionTab({ project }: ExecutionProps) {
         const stageInfo = STAGE_STATUS_MAP[stage.status] || STAGE_STATUS_MAP.pending;
         return (
           <div key={stage.id} className="relative pl-10">
-            {idx < stages.length - 1 && (
-              <div className={`absolute left-4 top-9 bottom-0 w-0.5 ${stage.status === "completed" ? "bg-green-300" : "bg-border"}`} />
-            )}
-            <div className={`absolute left-2 top-5 w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-              stage.status === "completed" ? "bg-green-400 border-green-400" :
-              stage.status === "in_progress" ? "bg-terra border-terra" :
-              "bg-white border-stone-light"
-            }`}>
+            {idx < stages.length - 1 && <div className={`absolute left-4 top-9 bottom-0 w-0.5 ${stage.status === "completed" ? "bg-green-300" : "bg-border"}`} />}
+            <div className={`absolute left-2 top-5 w-4 h-4 rounded-full border-2 flex items-center justify-center ${stage.status === "completed" ? "bg-green-400 border-green-400" : stage.status === "in_progress" ? "bg-terra border-terra" : "bg-white border-stone-light"}`}>
               {stage.status === "completed" && <Icon name="Check" size={9} className="text-white" />}
               {stage.status === "in_progress" && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
             </div>
-
             <div className="bg-white rounded-2xl border border-border mb-4 overflow-hidden">
-              <button
-                className="w-full text-left p-5 flex items-center justify-between hover:bg-muted/30 transition-colors"
-                onClick={() => setOpenStage(openStage === stage.id ? null : stage.id)}
-              >
+              <button className="w-full text-left p-5 flex items-center justify-between hover:bg-muted/30 transition-colors" onClick={() => setOpenStage(openStage === stage.id ? null : stage.id)}>
                 <div className="flex items-center gap-3 flex-wrap">
                   <span className="font-semibold text-stone text-sm">{stage.title}</span>
-                  <span className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border font-medium ${stageInfo.color}`}>
-                    {stageInfo.icon} {stageInfo.label}
-                  </span>
-                  <span className="text-xs text-stone-light">
-                    {formatDate(stage.start_date)} — {formatDate(stage.end_date)}
-                  </span>
+                  <span className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border font-medium ${stageInfo.color}`}>{stageInfo.icon} {stageInfo.label}</span>
+                  <span className="text-xs text-stone-light">{formatDate(stage.start_date)} — {formatDate(stage.end_date)}</span>
                 </div>
                 <Icon name={openStage === stage.id ? "ChevronUp" : "ChevronDown"} size={16} className="text-stone-light flex-shrink-0" />
               </button>
-
               {openStage === stage.id && (
                 <div className="px-5 pb-5 border-t border-border space-y-4 animate-fade-in">
-                  <p className="text-sm text-stone-mid pt-4">
-                    {stage.description || "Описание этапа пока не добавлено"}
-                  </p>
-
+                  <p className="text-sm text-stone-mid pt-4">{stage.description || "Описание этапа пока не добавлено"}</p>
                   <div>
                     <p className="text-xs font-semibold text-stone mb-2">Файлы</p>
-                    <div className="flex flex-wrap gap-2">
-                      <button className="w-16 h-16 border-2 border-dashed border-border rounded-xl flex flex-col items-center justify-center gap-1 hover:border-terra/40 transition-colors">
-                        <Icon name="Plus" size={16} className="text-stone-light" />
-                        <span className="text-xs text-stone-light">Файл</span>
-                      </button>
-                    </div>
+                    <button className="w-16 h-16 border-2 border-dashed border-border rounded-xl flex flex-col items-center justify-center gap-1 hover:border-terra/40 transition-colors">
+                      <Icon name="Plus" size={16} className="text-stone-light" /><span className="text-xs text-stone-light">Файл</span>
+                    </button>
                   </div>
-
                   <div>
                     <p className="text-xs font-semibold text-stone mb-2">Комментарии</p>
                     <p className="text-xs text-stone-light mb-3">Комментариев пока нет</p>
                     <div className="flex gap-2">
-                      <input
-                        value={commentInputs[stage.id] || ""}
-                        onChange={e => setCommentInputs(p => ({ ...p, [stage.id]: e.target.value }))}
-                        placeholder="Добавить комментарий..."
-                        className="flex-1 px-3 py-2 rounded-xl border border-border bg-background text-stone text-xs focus:outline-none focus:ring-2 focus:ring-terra/20 focus:border-terra"
-                      />
-                      <button className="terra-gradient text-white px-3 py-2 rounded-xl text-xs hover:opacity-90 transition-opacity">
-                        <Icon name="Send" size={13} className="text-white" />
-                      </button>
+                      <input value={commentInputs[stage.id] || ""} onChange={e => setCommentInputs(p => ({ ...p, [stage.id]: e.target.value }))} placeholder="Добавить комментарий..." className="flex-1 px-3 py-2 rounded-xl border border-border bg-background text-stone text-xs focus:outline-none focus:ring-2 focus:ring-terra/20 focus:border-terra" />
+                      <button className="terra-gradient text-white px-3 py-2 rounded-xl text-xs hover:opacity-90 transition-opacity"><Icon name="Send" size={13} className="text-white" /></button>
                     </div>
                   </div>
                 </div>
@@ -306,11 +388,9 @@ export function ExecutionTab({ project }: ExecutionProps) {
           </div>
         );
       })}
-
       <div className="pl-10">
         <button className="flex items-center gap-2 text-sm text-terra border-2 border-dashed border-terra/30 rounded-2xl px-5 py-3 w-full justify-center hover:bg-terra-pale transition-colors">
-          <Icon name="Plus" size={16} />
-          Добавить этап
+          <Icon name="Plus" size={16} /> Добавить этап
         </button>
       </div>
     </div>
