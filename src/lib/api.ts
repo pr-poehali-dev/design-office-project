@@ -125,6 +125,14 @@ export async function updateProject(
   return handleResponse(res);
 }
 
+export async function deleteProject(id: string) {
+  const res = await fetch(`${API_URLS.projects}?id=${id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  return handleResponse(res);
+}
+
 // Designers
 export async function getDesigners(params?: {
   city?: string;

@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Icon from "@/components/ui/icon";
 import { fmtMoney } from "./projectDetail.types";
+import { deleteProject } from "@/lib/api";
 import type { ProjectData } from "./ProjectDetail";
 
 const STATUS_MAP: Record<string, { label: string; color: string }> = {
@@ -38,7 +40,10 @@ interface OverviewProps {
 }
 
 export function OverviewTab({ project }: OverviewProps) {
+  const navigate = useNavigate();
   const [msgInput, setMsgInput] = useState("");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const statusInfo = STATUS_MAP[project.status] || STATUS_MAP.draft;
 
@@ -84,6 +89,12 @@ export function OverviewTab({ project }: OverviewProps) {
             </button>
             <button className="flex items-center gap-1.5 text-sm px-3.5 py-2 rounded-xl terra-gradient text-white hover:opacity-90 transition-all">
               <Icon name="UserPlus" size={14} className="text-white" /> Пригласить
+            </button>
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="flex items-center gap-1.5 text-sm px-3.5 py-2 rounded-xl border border-red-200 text-red-500 hover:bg-red-50 hover:border-red-300 transition-all"
+            >
+              <Icon name="Trash2" size={14} />
             </button>
           </div>
         </div>
@@ -154,6 +165,45 @@ export function OverviewTab({ project }: OverviewProps) {
           </div>
         </div>
       </div>
+
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 animate-scale-in">
+            <div className="w-12 h-12 bg-red-50 rounded-xl flex items-center justify-center mx-auto mb-4">
+              <Icon name="Trash2" size={22} className="text-red-500" />
+            </div>
+            <h3 className="font-display text-xl text-stone text-center mb-2">Удалить проект?</h3>
+            <p className="text-stone-mid text-sm text-center mb-6">
+              Проект «{project.title}» и все связанные данные будут удалены безвозвратно.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1 py-2.5 rounded-xl border border-border text-stone-mid text-sm font-medium hover:bg-muted transition-colors"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={async () => {
+                  setDeleting(true);
+                  try {
+                    await deleteProject(project.id);
+                    navigate("/dashboard");
+                  } catch (err) {
+                    console.error("Delete failed:", err);
+                    setDeleting(false);
+                    setShowDeleteConfirm(false);
+                  }
+                }}
+                disabled={deleting}
+                className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-medium hover:bg-red-600 transition-colors disabled:opacity-60"
+              >
+                {deleting ? "Удаляем..." : "Удалить"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

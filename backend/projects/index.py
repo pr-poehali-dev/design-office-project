@@ -378,6 +378,51 @@ def handle_update_project(body_str, project_id, user):
         conn.close()
 
 
+def handle_delete_project(project_id, user):
+    if user["role"] != "designer":
+        return error_response("Only designers can delete projects", 403)
+
+    conn = get_connection()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                f"SELECT id, designer_id FROM {SCHEMA}.projects WHERE id = %s",
+                (project_id,),
+            )
+            project = cur.fetchone()
+            if not project:
+                return error_response("Project not found", 404)
+            if str(project["designer_id"]) != str(user["id"]):
+                return error_response("Only the project owner can delete it", 403)
+
+            for table in ["stages", "tasks", "messages", "briefs", "estimates", "payments", "documents", "files", "project_members", "comments"]:
+                try:
+                    if table == "comments":
+                        cur.execute(
+                            f"DELETE FROM {SCHEMA}.comments WHERE stage_id IN (SELECT id FROM {SCHEMA}.stages WHERE project_id = %s)",
+                            (project_id,),
+                        )
+                    else:
+                        cur.execute(f"DELETE FROM {SCHEMA}.{table} WHERE project_id = %s", (project_id,))
+                except Exception:
+                    pass
+
+            cur.execute(f"DELETE FROM {SCHEMA}.projects WHERE id = %s", (project_id,))
+            cur.execute(
+                f"UPDATE {SCHEMA}.users SET projects_count = GREATEST(projects_count - 1, 0) WHERE id = %s",
+                (str(user["id"]),),
+            )
+            conn.commit()
+
+        return json_response({"message": "Project deleted"})
+    except Exception as e:
+        conn.rollback()
+        print(f"Delete project error: {e}")
+        return error_response("Internal server error", 500)
+    finally:
+        conn.close()
+
+
 def handler(event, context=None):
     method = event.get("httpMethod", event.get("method", "GET"))
     path = event.get("path", "/")
@@ -409,6 +454,8 @@ def handler(event, context=None):
                 return handle_get_project(project_id, user)
             if method == "PUT":
                 return handle_update_project(body, project_id, user)
+            if method == "DELETE":
+                return handle_delete_project(project_id, user)
             return error_response("Method not allowed", 400)
 
         return error_response("Not found", 404)
