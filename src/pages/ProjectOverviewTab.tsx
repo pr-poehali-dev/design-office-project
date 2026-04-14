@@ -1,7 +1,7 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import Icon from "@/components/ui/icon";
-import { KanbanCol, KanbanTask, INIT_TASKS, CHAT_MSGS, fmtMoney } from "./projectDetail.types";
-import type { ProjectData, StageData } from "./ProjectDetail";
+import { fmtMoney } from "./projectDetail.types";
+import type { ProjectData } from "./ProjectDetail";
 
 const STATUS_MAP: Record<string, { label: string; color: string }> = {
   draft: { label: "Черновик", color: "bg-gray-50 text-gray-600 border-gray-200" },
@@ -21,38 +21,32 @@ function formatDate(d?: string) {
   return new Date(d).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" });
 }
 
+function EmptyBlock({ icon, title, subtitle }: { icon: string; title: string; subtitle: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-6 text-center">
+      <div className="w-10 h-10 bg-muted rounded-xl flex items-center justify-center mb-2">
+        <Icon name={icon} fallback="Circle" size={18} className="text-stone-light" />
+      </div>
+      <p className="text-xs font-medium text-stone-mid">{title}</p>
+      <p className="text-xs text-stone-light mt-0.5">{subtitle}</p>
+    </div>
+  );
+}
+
 interface OverviewProps {
   project: ProjectData;
 }
 
 export function OverviewTab({ project }: OverviewProps) {
-  const [tasks, setTasks] = useState<KanbanTask[]>(INIT_TASKS);
-  const [chatTab, setChatTab] = useState<"client" | "workers">("client");
   const [msgInput, setMsgInput] = useState("");
-  const dragId = useRef<number | null>(null);
-  const dragOver = useRef<KanbanCol | null>(null);
-
-  const onDragStart = (id: number) => { dragId.current = id; };
-  const onDragOver = (col: KanbanCol, e: React.DragEvent) => { e.preventDefault(); dragOver.current = col; };
-  const onDrop = () => {
-    if (dragId.current === null || dragOver.current === null) return;
-    setTasks(t => t.map(task => task.id === dragId.current ? { ...task, col: dragOver.current! } : task));
-    dragId.current = null; dragOver.current = null;
-  };
-
-  const cols: { key: KanbanCol; label: string }[] = [
-    { key: "todo", label: "К выполнению" },
-    { key: "doing", label: "В работе" },
-    { key: "done", label: "Готово" },
-  ];
 
   const statusInfo = STATUS_MAP[project.status] || STATUS_MAP.draft;
 
   const clientMember = project.members?.find(m => m.role === "client");
-  const clientName = clientMember ? `${clientMember.first_name || ""} ${clientMember.last_name || ""}`.trim() : "Не назначен";
+  const clientName = clientMember ? `${clientMember.first_name || ""} ${clientMember.last_name || ""}`.trim() : null;
 
   const infoRows = [
-    clientMember ? ["Клиент", clientName] : null,
+    clientName ? ["Клиент", clientName] : null,
     project.address ? ["Адрес", project.address] : null,
     project.area ? ["Площадь", `${project.area} м²`] : null,
     project.rooms ? ["Комнат", String(project.rooms)] : null,
@@ -96,6 +90,7 @@ export function OverviewTab({ project }: OverviewProps) {
       </div>
 
       <div className="grid md:grid-cols-3 gap-5">
+        {/* Finance widget */}
         <div className="bg-white rounded-2xl border border-border p-5">
           <div className="flex items-center gap-2 mb-4">
             <div className="w-7 h-7 terra-gradient rounded-lg flex items-center justify-center">
@@ -124,39 +119,18 @@ export function OverviewTab({ project }: OverviewProps) {
           </div>
         </div>
 
+        {/* Tasks widget — empty */}
         <div className="bg-white rounded-2xl border border-border p-5">
           <div className="flex items-center gap-2 mb-4">
             <div className="w-7 h-7 terra-gradient rounded-lg flex items-center justify-center">
-              <Icon name="Kanban" fallback="Layout" size={13} className="text-white" />
+              <Icon name="CheckSquare" fallback="Layout" size={13} className="text-white" />
             </div>
             <span className="font-semibold text-stone text-sm">Задачи</span>
           </div>
-          <div className="grid grid-cols-3 gap-2">
-            {cols.map(col => (
-              <div
-                key={col.key}
-                onDragOver={(e) => onDragOver(col.key, e)}
-                onDrop={onDrop}
-                className="min-h-[80px]"
-              >
-                <div className="text-xs text-stone-light font-medium mb-1.5 text-center">{col.label}</div>
-                <div className="space-y-1.5">
-                  {tasks.filter(t => t.col === col.key).map(task => (
-                    <div
-                      key={task.id}
-                      draggable
-                      onDragStart={() => onDragStart(task.id)}
-                      className="bg-background border border-border rounded-lg px-2 py-1.5 text-xs text-stone cursor-grab active:cursor-grabbing hover:border-terra/30 transition-all select-none"
-                    >
-                      {task.text}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
+          <EmptyBlock icon="ListTodo" title="Задач пока нет" subtitle="Создайте первую задачу" />
         </div>
 
+        {/* Chat widget — empty */}
         <div className="bg-white rounded-2xl border border-border p-5 flex flex-col">
           <div className="flex items-center gap-2 mb-3">
             <div className="w-7 h-7 terra-gradient rounded-lg flex items-center justify-center">
@@ -164,26 +138,8 @@ export function OverviewTab({ project }: OverviewProps) {
             </div>
             <span className="font-semibold text-stone text-sm">Чат</span>
           </div>
-          <div className="flex gap-1 bg-muted rounded-xl p-1 mb-3">
-            {(["client", "workers"] as const).map(t => (
-              <button
-                key={t}
-                onClick={() => setChatTab(t)}
-                className={`flex-1 text-xs py-1.5 rounded-lg font-medium transition-all ${chatTab === t ? "bg-white text-stone shadow-sm" : "text-stone-mid"}`}
-              >
-                {t === "client" ? "С клиентом" : "С рабочими"}
-              </button>
-            ))}
-          </div>
-          <div className="flex-1 space-y-2 overflow-y-auto max-h-36 mb-3">
-            {CHAT_MSGS[chatTab].map(msg => (
-              <div key={msg.id} className={`flex ${msg.from === "designer" ? "justify-start" : "justify-end"}`}>
-                <div className={`max-w-[80%] rounded-xl px-2.5 py-1.5 ${msg.from === "designer" ? "bg-muted" : "terra-gradient"}`}>
-                  <p className={`text-xs ${msg.from === "designer" ? "text-stone" : "text-white"}`}>{msg.text}</p>
-                  <p className={`text-xs mt-0.5 ${msg.from === "designer" ? "text-stone-light" : "text-white/60"}`}>{msg.time}</p>
-                </div>
-              </div>
-            ))}
+          <div className="flex-1 mb-3">
+            <EmptyBlock icon="MessagesSquare" title="Нет сообщений" subtitle="Пригласите участников для общения" />
           </div>
           <div className="flex gap-2">
             <input
@@ -212,6 +168,21 @@ export function ExecutionTab({ project }: ExecutionProps) {
     stages.find(s => s.status === "in_progress")?.id || stages[0]?.id || null
   );
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
+
+  if (stages.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl border border-border p-12 text-center">
+        <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <Icon name="ListChecks" size={28} className="text-stone-light" />
+        </div>
+        <h3 className="font-display text-xl text-stone mb-2">Нет этапов</h3>
+        <p className="text-stone-mid text-sm mb-6">Добавьте первый этап проекта</p>
+        <button className="terra-gradient text-white font-medium px-6 py-3 rounded-xl hover:opacity-90 transition-all text-sm">
+          Добавить этап
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-0">
