@@ -12,7 +12,7 @@ JWT_SECRET = os.environ.get("JWT_SECRET", "fallback-secret")
 CORS_HEADERS = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Authorization",
     "Content-Type": "application/json",
 }
 
@@ -47,7 +47,13 @@ def error_response(message, status_code):
 
 
 def extract_token(headers):
-    auth_header = headers.get("Authorization") or headers.get("authorization", "")
+    auth_header = (
+        headers.get("X-Authorization")
+        or headers.get("x-authorization")
+        or headers.get("Authorization")
+        or headers.get("authorization")
+        or ""
+    )
     if not auth_header.startswith("Bearer "):
         return None
     return auth_header[7:]

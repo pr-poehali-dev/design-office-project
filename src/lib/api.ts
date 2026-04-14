@@ -15,6 +15,7 @@ function authHeaders(): Record<string, string> {
   };
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
+    headers["X-Authorization"] = `Bearer ${token}`;
   }
   return headers;
 }
