@@ -112,7 +112,31 @@ export function useUpdateTask() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) => updateTask(id, data),
-    onSuccess: () => {
+    onMutate: async ({ id, data }) => {
+      await qc.cancelQueries({ queryKey: ["tasks"] });
+
+      const prevAll = qc.getQueryData(["tasks", "all"]);
+      const prevProject = qc.getQueriesData({ queryKey: ["tasks", "project"] });
+
+      const patchList = (old: unknown) => {
+        if (!Array.isArray(old)) return old;
+        return old.map((t: Record<string, unknown>) => t.id === id ? { ...t, ...data } : t);
+      };
+
+      qc.setQueryData(["tasks", "all"], patchList);
+      qc.setQueriesData({ queryKey: ["tasks", "project"] }, patchList);
+
+      return { prevAll, prevProject };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.prevAll) qc.setQueryData(["tasks", "all"], context.prevAll);
+      if (context?.prevProject) {
+        for (const [key, data] of context.prevProject) {
+          qc.setQueryData(key, data);
+        }
+      }
+    },
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: ["tasks"] });
     },
   });
@@ -141,11 +165,34 @@ export function useMessages(projectId: string | undefined, enabled = true) {
   });
 }
 
-export function useSendMessage() {
+export function useSendMessage(currentUser?: { id: string; first_name?: string; last_name?: string }) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: sendMessage,
-    onSuccess: (_res, vars) => {
+    onMutate: async (vars) => {
+      await qc.cancelQueries({ queryKey: ["messages", vars.project_id] });
+      const prev = qc.getQueryData(["messages", vars.project_id]);
+
+      if (currentUser) {
+        qc.setQueryData(["messages", vars.project_id], (old: unknown) => {
+          const list = Array.isArray(old) ? old : [];
+          return [...list, {
+            id: `temp-${Date.now()}`,
+            content: vars.content,
+            sender_id: currentUser.id,
+            sender_first_name: currentUser.first_name || "",
+            sender_last_name: currentUser.last_name || "",
+            created_at: new Date().toISOString(),
+          }];
+        });
+      }
+
+      return { prev };
+    },
+    onError: (_err, vars, context) => {
+      if (context?.prev) qc.setQueryData(["messages", vars.project_id], context.prev);
+    },
+    onSettled: (_res, _err, vars) => {
       qc.invalidateQueries({ queryKey: ["messages", vars.project_id] });
     },
   });

@@ -67,7 +67,7 @@ export function OverviewTab({ project }: OverviewProps) {
   const { data: messages = [] } = useMessages(project.id);
   const createTaskMutation = useCreateTask();
   const updateTaskMutation = useUpdateTask();
-  const sendMessageMutation = useSendMessage();
+  const sendMessageMutation = useSendMessage(user ? { id: user.id, first_name: user.first_name, last_name: user.last_name } : undefined);
   const inviteMutation = useInviteMember();
   const deleteProjectMutation = useDeleteProject();
 
