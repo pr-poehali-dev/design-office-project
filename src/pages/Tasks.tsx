@@ -521,7 +521,7 @@ function NewTaskModal({ onClose, onAdd }: { onClose: () => void; onAdd: (t: Task
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function Tasks() {
   const navigate = useNavigate();
-  const [view, setView] = useState<"calendar" | "kanban" | "list">("calendar");
+  const [bottomView, setBottomView] = useState<"kanban" | "list">("kanban");
   const [tasks, setTasks] = useState<Task[]>(INIT_TASKS);
   const [filterProject, setFilterProject] = useState("Все проекты");
   const [filterPriority, setFilterPriority] = useState("Все");
@@ -532,12 +532,6 @@ export default function Tasks() {
     const matchPriority = filterPriority === "Все" || PRIORITY_CONFIG[t.priority].label === filterPriority;
     return matchProject && matchPriority;
   });
-
-  const views = [
-    { id: "calendar", label: "Календарь", icon: "CalendarDays" },
-    { id: "kanban", label: "Канбан", icon: "Columns3" },
-    { id: "list", label: "Список", icon: "List" },
-  ] as const;
 
   return (
     <div className="min-h-screen bg-background font-body flex">
@@ -602,22 +596,8 @@ export default function Tasks() {
             </button>
           </div>
 
-          {/* Toolbar */}
+          {/* Блок 1 — Фильтры */}
           <div className="flex flex-wrap gap-2 items-center mb-5">
-            {/* View switcher */}
-            <div className="flex gap-1 bg-white border border-border rounded-xl p-1">
-              {views.map(v => (
-                <button
-                  key={v.id}
-                  onClick={() => setView(v.id)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${view === v.id ? "terra-gradient text-white" : "text-stone-mid hover:text-stone"}`}
-                >
-                  <Icon name={v.icon} fallback="Circle" size={13} className={view === v.id ? "text-white" : ""} />
-                  {v.label}
-                </button>
-              ))}
-            </div>
-
             {/* Project filter */}
             <select
               value={filterProject}
@@ -643,11 +623,36 @@ export default function Tasks() {
             <span className="text-xs text-stone-light ml-auto">{filtered.length} задач</span>
           </div>
 
-          {/* View content */}
-          <div className="animate-fade-in" key={view}>
-            {view === "calendar" && <CalendarView tasks={filtered} />}
-            {view === "kanban" && <KanbanView tasks={filtered} setTasks={setTasks} />}
-            {view === "list" && <ListView tasks={filtered} />}
+          {/* Блок 2 — Календарь + задачи на день */}
+          <div className="mb-6">
+            <CalendarView tasks={filtered} />
+          </div>
+
+          {/* Блок 3 — Канбан / Список */}
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-stone text-base">Все задачи</h2>
+              {/* Тогл Канбан / Список */}
+              <div className="flex gap-1 bg-white border border-border rounded-xl p-1">
+                {([
+                  { id: "kanban", label: "Канбан", icon: "Columns3" },
+                  { id: "list", label: "Список", icon: "List" },
+                ] as const).map(v => (
+                  <button
+                    key={v.id}
+                    onClick={() => setBottomView(v.id)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${bottomView === v.id ? "terra-gradient text-white" : "text-stone-mid hover:text-stone"}`}
+                  >
+                    <Icon name={v.icon} fallback="Circle" size={13} className={bottomView === v.id ? "text-white" : ""} />
+                    {v.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="animate-fade-in" key={bottomView}>
+              {bottomView === "kanban" && <KanbanView tasks={filtered} setTasks={setTasks} />}
+              {bottomView === "list" && <ListView tasks={filtered} />}
+            </div>
           </div>
         </div>
       </main>
