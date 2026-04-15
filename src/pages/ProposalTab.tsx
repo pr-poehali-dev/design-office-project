@@ -6,51 +6,10 @@ import { useAuth } from "@/lib/auth";
 import { useProposal, useCreateProposal, useUpdateProposal, useUploadProposalBg, useProposalTemplates, useSaveProposalTemplate, useDeleteProposalTemplate } from "@/lib/queries";
 import { fmtMoney } from "./projectDetail.types";
 import type { ProjectData } from "./ProjectDetail";
-
-interface ProposalItem {
-  id?: string;
-  order_number: number;
-  title: string;
-  description: string;
-  price: number;
-}
-
-interface Proposal {
-  id: string;
-  status: string;
-  background_url: string | null;
-  background_preset: string | null;
-  template_name: string | null;
-  discount: number;
-  discount_type: string;
-  items: ProposalItem[];
-  created_at?: string;
-}
-
-interface Template {
-  id: string;
-  name: string;
-  items: ProposalItem[];
-}
-
-const STATUS_MAP: Record<string, { label: string; color: string }> = {
-  draft: { label: "Черновик", color: "bg-gray-50 text-gray-600 border-gray-200" },
-  sent: { label: "Отправлено", color: "bg-blue-50 text-blue-700 border-blue-200" },
-  accepted: { label: "Принято", color: "bg-green-50 text-green-700 border-green-200" },
-  declined: { label: "Отклонено", color: "bg-red-50 text-red-600 border-red-200" },
-};
-
-const PRESET_BACKGROUNDS: { id: string; label: string; url: string }[] = [
-  { id: "marble", label: "Мрамор", url: "https://images.unsplash.com/photo-1558618666-fcd25c85f82e?w=1200&q=60" },
-  { id: "concrete", label: "Бетон", url: "https://images.unsplash.com/photo-1558591710-4b4a1ae0f04d?w=1200&q=60" },
-  { id: "wood", label: "Дерево", url: "https://images.unsplash.com/photo-1558618666-fcd25c85f82e?w=1200&q=60" },
-  { id: "minimal", label: "Минимализм", url: "" },
-];
-
-function formatDate(d?: string) {
-  if (!d) return new Date().toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" });
-  return new Date(d).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" });
-}
+import type { ProposalItem, Proposal, Template } from "./proposal/proposalTypes";
+import { STATUS_MAP } from "./proposal/proposalTypes";
+import ProposalDocument from "./proposal/ProposalDocument";
+import { BgPickerModal, TemplatesModal, SaveTemplateModal } from "./proposal/ProposalModals";
 
 export default function ProposalTab({ project }: { project: ProjectData }) {
   const { user } = useAuth();
@@ -71,7 +30,6 @@ export default function ProposalTab({ project }: { project: ProjectData }) {
   const [editDiscount, setEditDiscount] = useState<number | null>(null);
   const [editDiscountType, setEditDiscountType] = useState<string>("fixed");
   const [saving, setSaving] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const docRef = useRef<HTMLDivElement>(null);
   const dragIdx = useRef<number | null>(null);
   const [generatingPdf, setGeneratingPdf] = useState(false);
@@ -87,7 +45,6 @@ export default function ProposalTab({ project }: { project: ProjectData }) {
   const total = Math.max(0, subtotal - discountAmount);
   const pricePerSqm = project.area ? Math.round(total / project.area) : 0;
 
-  const bgUrl = prop?.background_url || (prop?.background_preset ? PRESET_BACKGROUNDS.find(p => p.id === prop.background_preset)?.url : null);
   const statusInfo = STATUS_MAP[prop?.status || "draft"] || STATUS_MAP.draft;
 
   const handleCreate = async (templateItems?: ProposalItem[]) => {
@@ -249,8 +206,6 @@ export default function ProposalTab({ project }: { project: ProjectData }) {
     );
   }
 
-  const clientMember = project.members?.find(m => m.role === "client");
-  const clientName = clientMember ? `${clientMember.first_name || ""} ${clientMember.last_name || ""}`.trim() : "—";
   const isEditing = editingItems !== null;
 
   return (
@@ -301,198 +256,62 @@ export default function ProposalTab({ project }: { project: ProjectData }) {
         )}
       </div>
 
-      {/* Proposal document */}
-      <div ref={docRef} className="relative bg-white rounded-2xl border border-border overflow-hidden shadow-sm">
-        {bgUrl && (
-          <div className="absolute inset-0 z-0">
-            <img src={bgUrl} alt="" className="w-full h-full object-cover" />
-            <div className="absolute inset-0 bg-white/85" />
-          </div>
-        )}
-        <div className="relative z-10">
-          {/* Header */}
-          <div className="p-6 md:p-8 border-b border-border/50">
-            <div className="flex items-start justify-between gap-4 mb-6">
-              <div>
-                <div className="w-10 h-10 terra-gradient rounded-xl flex items-center justify-center mb-3"><Icon name="Layers" size={18} className="text-white" /></div>
-                <h2 className="font-display text-2xl md:text-3xl font-light text-stone">Коммерческое предложение</h2>
-                <p className="text-xs text-stone-light mt-1">{formatDate(prop.created_at)}</p>
-              </div>
-              <div className="text-right text-xs text-stone-mid space-y-1">
-                {project.title && <p><span className="text-stone-light">Проект:</span> {project.title}</p>}
-                {project.address && <p><span className="text-stone-light">Адрес:</span> {project.address}</p>}
-                {project.area && <p><span className="text-stone-light">Площадь:</span> {project.area} м²</p>}
-                <p><span className="text-stone-light">Клиент:</span> {clientName}</p>
-              </div>
-            </div>
-          </div>
+      {/* Document */}
+      <ProposalDocument
+        ref={docRef}
+        proposal={prop}
+        project={project}
+        items={items}
+        isEditing={isEditing}
+        editIdx={editIdx}
+        subtotal={subtotal}
+        discount={discount}
+        discountType={discountType}
+        discountAmount={discountAmount}
+        total={total}
+        pricePerSqm={pricePerSqm}
+        editDiscount={editDiscount}
+        editDiscountType={editDiscountType}
+        user={user}
+        dragIdxRef={dragIdx}
+        onSetEditIdx={setEditIdx}
+        onUpdateItem={updateItem}
+        onRemoveItem={removeItem}
+        onDragOver={handleDragOver}
+        onSetEditDiscount={setEditDiscount}
+        onSetEditDiscountType={setEditDiscountType}
+      />
 
-          {/* Items */}
-          <div className="p-6 md:p-8 space-y-0">
-            {items.map((item, idx) => {
-              const isItemEditing = isEditing && editIdx === idx;
-              return (
-                <div key={item.id || idx} draggable={isEditing} onDragStart={() => { dragIdx.current = idx; }} onDragOver={e => handleDragOver(e, idx)} onDragEnd={() => { dragIdx.current = null; }} className={`border-b border-border/40 py-5 ${isEditing ? "cursor-grab active:cursor-grabbing hover:bg-terra-pale/30 rounded-xl px-3 -mx-3 transition-colors" : ""}`}>
-                  {isItemEditing ? (
-                    <div className="space-y-3">
-                      <div className="flex gap-3">
-                        <input value={item.title} onChange={e => updateItem(idx, "title", e.target.value)} className="flex-1 px-3 py-2 rounded-xl border border-border bg-background text-stone text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-terra/20" />
-                        <input type="number" value={item.price} onChange={e => updateItem(idx, "price", e.target.value)} className="w-32 px-3 py-2 rounded-xl border border-border bg-background text-stone text-sm text-right font-semibold focus:outline-none focus:ring-2 focus:ring-terra/20" />
-                      </div>
-                      <textarea value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} rows={2} className="w-full px-3 py-2 rounded-xl border border-border bg-background text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20 resize-none" />
-                      <div className="flex gap-2">
-                        <button onClick={() => setEditIdx(null)} className="text-xs px-3 py-1.5 rounded-lg terra-gradient text-white">Готово</button>
-                        <button onClick={() => removeItem(idx)} className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-400 hover:bg-red-50">Удалить</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div onClick={() => isEditing && setEditIdx(idx)} className={isEditing ? "cursor-pointer" : ""}>
-                      <div className="flex items-start justify-between gap-4 mb-2">
-                        <div className="flex items-baseline gap-2">
-                          {isEditing && <Icon name="GripVertical" size={14} className="text-stone-light mt-0.5 flex-shrink-0" />}
-                          <h3 className="font-semibold text-stone text-base"><span className="text-stone-light font-normal">{idx + 1}.</span> {item.title}</h3>
-                        </div>
-                        <span className="font-display text-lg font-semibold text-terra whitespace-nowrap">{fmtMoney(Number(item.price))}</span>
-                      </div>
-                      {item.description && <p className="text-sm text-stone-mid leading-relaxed ml-0 md:ml-5">{item.description}</p>}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Footer / Total */}
-          <div className="p-6 md:p-8 border-t-2 border-stone/10 bg-muted/20">
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-              <div className="space-y-2">
-                {(discount > 0 || isEditing) && (
-                  <div className="space-y-1.5 mb-2">
-                    <div className="flex items-baseline gap-3">
-                      <span className="text-stone-mid text-sm">Подытог:</span>
-                      <span className="font-display text-lg text-stone-mid">{fmtMoney(subtotal)}</span>
-                    </div>
-                    {isEditing ? (
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-green-600">Скидка:</span>
-                        <input type="number" value={editDiscount ?? 0} onChange={e => setEditDiscount(Number(e.target.value) || 0)} className="w-24 px-2 py-1.5 rounded-lg border border-border bg-background text-sm text-stone text-right focus:outline-none focus:ring-2 focus:ring-terra/20" />
-                        <select value={editDiscountType} onChange={e => setEditDiscountType(e.target.value)} className="px-2 py-1.5 rounded-lg border border-border bg-background text-sm text-stone focus:outline-none">
-                          <option value="fixed">₽</option>
-                          <option value="percent">%</option>
-                        </select>
-                        {discountAmount > 0 && editDiscountType === "percent" && (
-                          <span className="text-xs text-green-600">({fmtMoney(discountAmount)})</span>
-                        )}
-                      </div>
-                    ) : discount > 0 ? (
-                      <div className="flex items-baseline gap-3">
-                        <span className="text-green-600 text-sm">Скидка:</span>
-                        <span className="font-semibold text-green-600">
-                          {discountType === "percent" ? `${discount}% (${fmtMoney(discountAmount)})` : fmtMoney(discountAmount)}
-                        </span>
-                      </div>
-                    ) : null}
-                  </div>
-                )}
-                <div className="flex items-baseline gap-3">
-                  <span className="text-stone-mid text-sm">Итого:</span>
-                  <span className="font-display text-3xl font-light text-stone">{fmtMoney(total)}</span>
-                </div>
-                {pricePerSqm > 0 && <p className="text-sm text-stone-mid">Стоимость за м²: <span className="font-semibold text-stone">{fmtMoney(pricePerSqm)}</span></p>}
-                {project.deadline && <p className="text-sm text-stone-mid">Сроки: <span className="font-medium text-stone">до {formatDate(project.deadline)}</span></p>}
-              </div>
-              <div className="text-right text-xs text-stone-mid space-y-0.5">
-                <p className="font-medium text-stone">{user?.first_name} {user?.last_name}</p>
-                {user?.email && <p>{user.email}</p>}
-                {user?.phone && <p>{user.phone}</p>}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Background picker */}
+      {/* Modals */}
       {showBgPicker && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 animate-scale-in">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-display text-xl text-stone">Фон КП</h3>
-              <button onClick={() => setShowBgPicker(false)} className="p-1.5 hover:bg-muted rounded-lg"><Icon name="X" size={16} className="text-stone-mid" /></button>
-            </div>
-            <p className="text-xs text-stone-light mb-3">Готовые фоны</p>
-            <div className="grid grid-cols-2 gap-2 mb-4">
-              {PRESET_BACKGROUNDS.map(preset => (
-                <button key={preset.id} onClick={() => handlePresetBg(preset.id)} className={`relative h-16 rounded-xl border-2 overflow-hidden transition-all ${prop?.background_preset === preset.id ? "border-terra" : "border-border hover:border-terra/40"}`}>
-                  {preset.url ? (<><img src={preset.url} alt={preset.label} className="w-full h-full object-cover" /><div className="absolute inset-0 bg-white/60" /></>) : (<div className="w-full h-full bg-gradient-to-br from-gray-50 to-white" />)}
-                  <span className="absolute inset-0 flex items-center justify-center text-xs font-medium text-stone">{preset.label}</span>
-                </button>
-              ))}
-            </div>
-            <div className="border-t border-border pt-4">
-              <p className="text-xs text-stone-light mb-2">Или загрузите свой</p>
-              <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleBgUpload(f); }} />
-              <button onClick={() => fileInputRef.current?.click()} disabled={uploadBgMutation.isPending} className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-border text-sm text-stone-mid hover:border-terra/40 hover:text-stone transition-colors disabled:opacity-50">
-                <Icon name="Upload" size={16} /> {uploadBgMutation.isPending ? "Загрузка..." : "Загрузить изображение"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <BgPickerModal
+          proposal={prop}
+          uploadPending={uploadBgMutation.isPending}
+          onClose={() => setShowBgPicker(false)}
+          onPresetBg={handlePresetBg}
+          onUploadBg={handleBgUpload}
+        />
       )}
 
-      {/* Templates modal */}
       {showTemplates && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 animate-scale-in">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-display text-xl text-stone">Шаблоны КП</h3>
-              <button onClick={() => setShowTemplates(false)} className="p-1.5 hover:bg-muted rounded-lg"><Icon name="X" size={16} className="text-stone-mid" /></button>
-            </div>
-            {(templates as Template[]).length === 0 ? (
-              <div className="text-center py-8">
-                <div className="w-14 h-14 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-3"><Icon name="LayoutTemplate" size={24} className="text-stone-light" /></div>
-                <p className="text-sm text-stone-mid mb-1">Шаблонов пока нет</p>
-                <p className="text-xs text-stone-light">Сохраните текущее КП как шаблон</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {(templates as Template[]).map(tpl => (
-                  <div key={tpl.id} className="flex items-center justify-between p-3 rounded-xl border border-border hover:bg-muted/30 transition-colors">
-                    <div>
-                      <p className="text-sm font-medium text-stone">{tpl.name}</p>
-                      <p className="text-xs text-stone-light">{(tpl.items as ProposalItem[]).length} пунктов — {fmtMoney((tpl.items as ProposalItem[]).reduce((s, i) => s + Number(i.price || 0), 0))}</p>
-                    </div>
-                    <div className="flex gap-1.5">
-                      <button onClick={() => handleApplyTemplate(tpl)} className="text-xs px-3 py-1.5 rounded-lg terra-gradient text-white hover:opacity-90">Применить</button>
-                      <button onClick={async () => { await deleteTemplateMutation.mutateAsync(tpl.id); }} className="p-1.5 rounded-lg border border-red-200 text-red-400 hover:bg-red-50"><Icon name="Trash2" size={12} /></button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+        <TemplatesModal
+          templates={templates as Template[]}
+          onClose={() => setShowTemplates(false)}
+          onApply={handleApplyTemplate}
+          onDelete={async (id) => { await deleteTemplateMutation.mutateAsync(id); }}
+        />
       )}
 
-      {/* Save as template modal */}
       {showSaveTemplate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 animate-scale-in">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-display text-xl text-stone">Сохранить как шаблон</h3>
-              <button onClick={() => setShowSaveTemplate(false)} className="p-1.5 hover:bg-muted rounded-lg"><Icon name="X" size={16} className="text-stone-mid" /></button>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs text-stone-light mb-1 block">Название шаблона</label>
-                <input value={saveTemplateName} onChange={e => setSaveTemplateName(e.target.value)} placeholder="Например: Полный проект" className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20 focus:border-terra" autoFocus />
-              </div>
-              <p className="text-xs text-stone-light">{items.length} пунктов, {fmtMoney(subtotal)}</p>
-              <button onClick={handleSaveAsTemplate} disabled={!saveTemplateName.trim() || saveTemplateMutation.isPending} className="w-full terra-gradient text-white py-2.5 rounded-xl text-sm font-medium hover:opacity-90 disabled:opacity-50">
-                {saveTemplateMutation.isPending ? "Сохраняем..." : "Сохранить шаблон"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <SaveTemplateModal
+          name={saveTemplateName}
+          itemsCount={items.length}
+          subtotal={subtotal}
+          saving={saveTemplateMutation.isPending}
+          onClose={() => setShowSaveTemplate(false)}
+          onChangeName={setSaveTemplateName}
+          onSave={handleSaveAsTemplate}
+        />
       )}
     </div>
   );
