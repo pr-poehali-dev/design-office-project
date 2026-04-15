@@ -8,7 +8,7 @@ export const NAV_ITEMS = [
   { icon: "CheckSquare", label: "Задачи", id: "tasks", path: "/tasks" },
   { icon: "Users", label: "Клиенты", id: "clients", path: "/dashboard" },
   { icon: "Handshake", label: "Гильдия", id: "guild", path: "/guild" },
-  { icon: "MessageCircle", label: "Сообщения", id: "messages", path: "/dashboard" },
+  { icon: "UsersRound", label: "Команда", id: "team", path: "/team" },
   { icon: "User", label: "Профиль", id: "profile", path: "/dashboard" },
 ];
 

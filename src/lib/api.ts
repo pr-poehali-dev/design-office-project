@@ -4,6 +4,7 @@ const API_URLS = {
   designers: "https://functions.poehali.dev/bfe179cb-2802-48ba-94bc-ede7fea2ab25",
   tasks: "https://functions.poehali.dev/a3b72923-93e5-4052-8d6a-7c879d1621cc",
   messages: "https://functions.poehali.dev/1bb1fc89-5192-4068-8f31-750a8936c19c",
+  team: "https://functions.poehali.dev/a4261477-82d9-4aee-90c1-67a418897761",
 };
 
 function getToken(): string | null {
@@ -200,6 +201,41 @@ export async function sendMessage(data: { project_id: string; content: string })
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify(data),
+  });
+  return handleResponse(res);
+}
+
+// Team
+export async function getTeam() {
+  const res = await fetch(API_URLS.team, {
+    method: "GET",
+    headers: authHeaders(),
+  });
+  return handleResponse(res);
+}
+
+export async function inviteToTeam(data: { email: string; team_role?: string }) {
+  const res = await fetch(API_URLS.team, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+  return handleResponse(res);
+}
+
+export async function updateTeamMember(id: string, data: Record<string, unknown>) {
+  const res = await fetch(`${API_URLS.team}?id=${id}`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+  return handleResponse(res);
+}
+
+export async function removeTeamMember(id: string) {
+  const res = await fetch(`${API_URLS.team}?id=${id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
   });
   return handleResponse(res);
 }

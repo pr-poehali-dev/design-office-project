@@ -34,7 +34,7 @@ const NAV_ITEMS = [
   { icon: "CheckSquare", label: "Задачи", id: "tasks", path: "/tasks" },
   { icon: "Users", label: "Клиенты", id: "clients", path: "" },
   { icon: "Handshake", label: "Гильдия", id: "guild", path: "/guild" },
-  { icon: "MessageCircle", label: "Сообщения", id: "messages", path: "", badge: 0 },
+  { icon: "UsersRound", label: "Команда", id: "team", path: "/team" },
   { icon: "User", label: "Профиль", id: "profile", path: "" },
 ];
 
@@ -212,7 +212,7 @@ export default function Dashboard() {
               {activeNav === "tasks" && "Задачи"}
               {activeNav === "clients" && "Клиенты"}
               {activeNav === "guild" && "Гильдия"}
-              {activeNav === "messages" && "Сообщения"}
+              {activeNav === "team" && "Команда"}
               {activeNav === "profile" && "Профиль"}
             </h1>
             <p className="text-stone-mid text-sm mt-0.5">

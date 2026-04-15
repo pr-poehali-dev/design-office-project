@@ -14,6 +14,10 @@ import {
   sendMessage,
   inviteMember,
   getDesigners,
+  getTeam,
+  inviteToTeam,
+  updateTeamMember,
+  removeTeamMember,
 } from "./api";
 
 const STALE_5MIN = 5 * 60 * 1000;
@@ -210,5 +214,47 @@ export function useDesigners(params?: { city?: string; specialization?: string; 
     queryFn: () => getDesigners(params),
     staleTime: STALE_5MIN,
     select: (data) => data.designers || [],
+  });
+}
+
+export function useTeam(enabled = true) {
+  return useQuery({
+    queryKey: ["team"],
+    queryFn: async () => {
+      const data = await getTeam();
+      return data.members || [];
+    },
+    staleTime: STALE_5MIN,
+    enabled,
+  });
+}
+
+export function useInviteToTeam() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: inviteToTeam,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["team"] });
+    },
+  });
+}
+
+export function useUpdateTeamMember() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) => updateTeamMember(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["team"] });
+    },
+  });
+}
+
+export function useRemoveTeamMember() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: removeTeamMember,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["team"] });
+    },
   });
 }
