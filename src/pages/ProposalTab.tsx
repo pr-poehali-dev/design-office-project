@@ -1,4 +1,6 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
+import html2canvas from "html2canvas";
+import { jsPDF } from "jspdf";
 import Icon from "@/components/ui/icon";
 import { useAuth } from "@/lib/auth";
 import { useProposal, useCreateProposal, useUpdateProposal, useUploadProposalBg } from "@/lib/queries";
@@ -53,7 +55,9 @@ export default function ProposalTab({ project }: { project: ProjectData }) {
   const [showBgPicker, setShowBgPicker] = useState(false);
   const [saving, setSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const docRef = useRef<HTMLDivElement>(null);
   const dragIdx = useRef<number | null>(null);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
 
   const isDesigner = user?.role === "designer";
   const prop = proposal as Proposal | null;
@@ -140,6 +144,30 @@ export default function ProposalTab({ project }: { project: ProjectData }) {
     try { await updateMutation.mutateAsync({ id: prop.id, data: { status } }); } catch { /* empty */ }
   };
 
+  const handleDownloadPdf = useCallback(async () => {
+    if (!docRef.current) return;
+    setGeneratingPdf(true);
+    try {
+      const el = docRef.current;
+      const canvas = await html2canvas(el, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: "#ffffff",
+        logging: false,
+      });
+      const imgData = canvas.toDataURL("image/jpeg", 0.95);
+      const pxW = canvas.width;
+      const pxH = canvas.height;
+      const pdfW = 210;
+      const pdfH = (pxH * pdfW) / pxW;
+      const pdf = new jsPDF({ orientation: pdfH > pdfW ? "portrait" : "landscape", unit: "mm", format: [pdfW, pdfH] });
+      pdf.addImage(imgData, "JPEG", 0, 0, pdfW, pdfH);
+      pdf.save(`КП_${project.title || "проект"}.pdf`);
+    } catch { /* empty */ }
+    setGeneratingPdf(false);
+  }, [project.title]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -177,10 +205,13 @@ export default function ProposalTab({ project }: { project: ProjectData }) {
         {isDesigner && !isEditing && (
           <>
             <button onClick={startEditing} className="flex items-center gap-1 text-xs px-3 py-2 rounded-xl border border-border text-stone-mid hover:bg-muted transition-colors">
-              <Icon name="Pencil" size={12} /> Реда��тировать
+              <Icon name="Pencil" size={12} /> Редактировать
             </button>
             <button onClick={() => setShowBgPicker(true)} className="flex items-center gap-1 text-xs px-3 py-2 rounded-xl border border-border text-stone-mid hover:bg-muted transition-colors">
               <Icon name="Image" size={12} /> Фон
+            </button>
+            <button onClick={handleDownloadPdf} disabled={generatingPdf} className="flex items-center gap-1 text-xs px-3 py-2 rounded-xl border border-border text-stone-mid hover:bg-muted transition-colors disabled:opacity-50">
+              <Icon name="Download" size={12} /> {generatingPdf ? "Генерация..." : "Скачать PDF"}
             </button>
             {prop.status === "draft" && (
               <button onClick={() => handleStatusChange("sent")} className="flex items-center gap-1 text-xs px-3 py-2 rounded-xl terra-gradient text-white hover:opacity-90">
@@ -209,7 +240,7 @@ export default function ProposalTab({ project }: { project: ProjectData }) {
       </div>
 
       {/* Proposal document */}
-      <div className="relative bg-white rounded-2xl border border-border overflow-hidden shadow-sm">
+      <div ref={docRef} className="relative bg-white rounded-2xl border border-border overflow-hidden shadow-sm">
         {bgUrl && (
           <div className="absolute inset-0 z-0">
             <img src={bgUrl} alt="" className="w-full h-full object-cover" />
