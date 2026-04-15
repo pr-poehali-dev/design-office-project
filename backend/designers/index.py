@@ -59,7 +59,9 @@ def handle_list_designers(query_params):
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
                 f"""SELECT id, first_name, last_name, city, specialization,
-                           rating, projects_count, avatar_url, bio, personal_id
+                           rating, projects_count, avatar_url, bio, personal_id,
+                           experience_years, work_styles, work_objects,
+                           accepting_orders, contacts_public, phone, email, telegram
                     FROM {SCHEMA}.users
                     WHERE {where_clause}
                     ORDER BY rating DESC, projects_count DESC""",

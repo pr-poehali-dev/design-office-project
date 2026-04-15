@@ -14,6 +14,11 @@ interface Designer {
   projects_count: number;
   avatar_url?: string;
   bio?: string;
+  personal_id?: string;
+  experience_years?: number;
+  work_styles?: string;
+  work_objects?: string;
+  accepting_orders?: boolean;
 }
 
 const SPEC_FILTERS = [
@@ -58,6 +63,12 @@ const AVATAR_COLORS = [
   "from-terra to-rose-500",
 ];
 
+const GUILD_TABS = [
+  { id: "members", label: "Участники", icon: "Users" },
+  { id: "forum", label: "Форум", icon: "MessageSquare" },
+  { id: "events", label: "Мероприятия", icon: "Calendar" },
+];
+
 function getAvatarColor(id: string) {
   let hash = 0;
   for (let i = 0; i < id.length; i++) {
@@ -88,6 +99,7 @@ export default function Guild() {
   const [specFilter, setSpecFilter] = useState("");
   const [cityFilter, setCityFilter] = useState("Все города");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [guildTab, setGuildTab] = useState("members");
   const [dmTarget, setDmTarget] = useState<{id: string, name: string} | null>(null);
   const [dmInput, setDmInput] = useState("");
   const [dmSending, setDmSending] = useState(false);
@@ -146,9 +158,6 @@ export default function Guild() {
             >
               <Icon name={item.icon} fallback="Circle" size={17} />
               <span>{item.label}</span>
-              {item.badge ? (
-                <span className="ml-auto w-5 h-5 terra-gradient rounded-full text-white text-xs flex items-center justify-center">{item.badge}</span>
-              ) : null}
             </button>
           ))}
         </nav>
@@ -168,190 +177,278 @@ export default function Guild() {
             <p className="text-stone-mid text-sm mt-1">Сообщество профессионалов — находите коллег и партнёров</p>
           </div>
 
-          {/* Search + filters */}
-          <div className="flex flex-col gap-3 mb-6">
-            <div className="relative">
-              <Icon name="Search" size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-light" />
-              <input
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Найти по имени или ID..."
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-border bg-white text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20 focus:border-terra"
-              />
-            </div>
-            <div className="flex flex-wrap gap-2 items-center">
-              {/* Spec filter */}
-              <div className="flex gap-1 bg-white border border-border rounded-xl p-1">
-                {SPEC_FILTERS.map(f => (
-                  <button
-                    key={f.value}
-                    onClick={() => setSpecFilter(f.value)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${specFilter === f.value ? "terra-gradient text-white" : "text-stone-mid hover:text-stone"}`}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
-              {/* City select */}
-              <select
-                value={cityFilter}
-                onChange={e => setCityFilter(e.target.value)}
-                className="px-3 py-2 rounded-xl border border-border bg-white text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20"
+          {/* Guild Tabs */}
+          <div className="flex gap-1 bg-white border border-border rounded-2xl p-1 mb-6 w-fit">
+            {GUILD_TABS.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setGuildTab(tab.id)}
+                className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-sm font-medium whitespace-nowrap transition-all ${
+                  guildTab === tab.id
+                    ? "terra-gradient text-white shadow-sm"
+                    : "text-stone-mid hover:text-stone hover:bg-muted"
+                }`}
               >
-                {CITY_FILTERS.map(c => <option key={c}>{c}</option>)}
-              </select>
-              {/* View toggle */}
-              <div className="ml-auto flex gap-1 bg-white border border-border rounded-xl p-1">
-                <button onClick={() => setViewMode("grid")} className={`p-1.5 rounded-lg transition-all ${viewMode === "grid" ? "terra-gradient" : "hover:bg-muted"}`}>
-                  <Icon name="LayoutGrid" size={15} className={viewMode === "grid" ? "text-white" : "text-stone-mid"} />
-                </button>
-                <button onClick={() => setViewMode("list")} className={`p-1.5 rounded-lg transition-all ${viewMode === "list" ? "terra-gradient" : "hover:bg-muted"}`}>
-                  <Icon name="List" size={15} className={viewMode === "list" ? "text-white" : "text-stone-mid"} />
-                </button>
-              </div>
-            </div>
+                <Icon name={tab.icon} fallback="Circle" size={15} className={guildTab === tab.id ? "text-white" : ""} />
+                {tab.label}
+              </button>
+            ))}
           </div>
 
-          {/* Count */}
-          <p className="text-xs text-stone-light mb-4">Найдено: {designers.length} дизайнеров</p>
-
-          {loading ? (
-            <div className="text-center py-12 text-stone-mid animate-pulse">
-              Загрузка дизайнеров...
-            </div>
-          ) : designers.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-border p-12 text-center">
-              <div className="w-16 h-16 bg-terra-pale rounded-2xl flex items-center justify-center mx-auto mb-4">
-                <Icon name="Users" size={28} className="text-terra" />
-              </div>
-              <h3 className="font-display text-xl text-stone mb-2">Дизайнеры не найдены</h3>
-              <p className="text-stone-mid text-sm">Попробуйте изменить фильтры поиска</p>
-            </div>
-          ) : (
+          {/* Members Tab */}
+          {guildTab === "members" && (
             <>
-              {/* Grid view */}
-              {viewMode === "grid" && (
-                <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {designers.map((d, i) => {
-                    const color = getAvatarColor(d.id);
-                    const initials = getInitials(d.first_name, d.last_name);
-                    const specLabel = d.specialization ? (SPEC_LABELS[d.specialization] || d.specialization) : "";
-                    const specColor = d.specialization ? (specColors[d.specialization] || "bg-muted text-stone-mid border-border") : "";
-                    return (
-                      <div
-                        key={d.id}
-                        className="bg-white rounded-2xl border border-border overflow-hidden hover:border-terra/30 hover:shadow-md hover:shadow-terra/5 transition-all animate-fade-in"
-                        style={{ animationDelay: `${i * 0.05}s` }}
-                      >
-                        {/* Portfolio previews */}
-                        <div className="h-24 grid grid-cols-3 gap-0.5 bg-muted">
-                          {[0, 1, 2].map(j => (
-                            <div key={j} className={`bg-gradient-to-br ${color} ${j === 0 ? "opacity-100" : j === 1 ? "opacity-70" : "opacity-50"} flex items-center justify-center`}>
-                              <Icon name="Image" size={14} className="text-white/40" />
-                            </div>
-                          ))}
-                        </div>
-                        <div className="p-4">
-                          {/* Avatar + name */}
-                          <div className="flex items-center gap-3 mb-3">
-                            <div className={`w-11 h-11 rounded-full bg-gradient-to-br ${color} flex items-center justify-center text-white font-semibold text-sm flex-shrink-0`}>
-                              {initials}
-                            </div>
-                            <div className="min-w-0">
-                              <div className="font-semibold text-stone text-sm truncate">{d.first_name} {d.last_name}</div>
-                              <div className="flex items-center gap-1 text-xs text-stone-light">
-                                <Icon name="MapPin" size={10} />
-                                {d.city || "Не указан"}
-                              </div>
-                              {d.personal_id && <div className="text-[10px] text-stone-light font-mono">ID: {d.personal_id}</div>}
-                            </div>
-                          </div>
-                          {specLabel && (
-                            <span className={`inline-block text-xs px-2 py-0.5 rounded-full border font-medium mb-2.5 ${specColor}`}>
-                              {specLabel}
-                            </span>
-                          )}
-                          <div className="flex items-center justify-between mb-3">
-                            <StarRating rating={d.rating} />
-                            <span className="text-xs text-stone-light">{d.projects_count} проектов</span>
-                          </div>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => navigate(`/guild/designer/${d.id}`)}
-                              className="flex-1 text-xs py-2 rounded-xl border border-border text-stone hover:border-terra/40 hover:text-terra transition-all font-medium"
-                            >
-                              Профиль
-                            </button>
-                            {d.id !== user?.id && (
-                              <button
-                                onClick={() => setDmTarget({ id: d.id, name: `${d.first_name} ${d.last_name}` })}
-                                className="flex-1 flex items-center justify-center gap-1 text-xs py-2 rounded-xl terra-gradient text-white hover:opacity-90 transition-all font-medium"
-                              >
-                                <Icon name="MessageCircle" size={12} /> Написать
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+              {/* Search + filters */}
+              <div className="flex flex-col gap-3 mb-6">
+                <div className="relative">
+                  <Icon name="Search" size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-light" />
+                  <input
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    placeholder="Найти по имени или ID..."
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-border bg-white text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20 focus:border-terra"
+                  />
                 </div>
-              )}
-
-              {/* List view */}
-              {viewMode === "list" && (
-                <div className="bg-white rounded-2xl border border-border overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b border-border bg-muted/30">
-                          {["Дизайнер", "Специализация", "Город", "Рейтинг", "Проектов", ""].map(h => (
-                            <th key={h} className="text-left px-4 py-3 text-xs text-stone-light font-medium whitespace-nowrap">{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {designers.map(d => {
-                          const color = getAvatarColor(d.id);
-                          const initials = getInitials(d.first_name, d.last_name);
-                          const specLabel = d.specialization ? (SPEC_LABELS[d.specialization] || d.specialization) : "-";
-                          const specColor = d.specialization ? (specColors[d.specialization] || "bg-muted text-stone-mid border-border") : "bg-muted text-stone-mid border-border";
-                          return (
-                            <tr key={d.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
-                              <td className="px-4 py-3">
-                                <div className="flex items-center gap-3">
-                                  <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${color} flex items-center justify-center text-white text-xs font-semibold`}>{initials}</div>
-                                  <span className="text-sm font-medium text-stone">{d.first_name} {d.last_name}</span>
-                                </div>
-                              </td>
-                              <td className="px-4 py-3">
-                                <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${specColor}`}>{specLabel}</span>
-                              </td>
-                              <td className="px-4 py-3 text-sm text-stone-mid">{d.city || "-"}</td>
-                              <td className="px-4 py-3"><StarRating rating={d.rating} /></td>
-                              <td className="px-4 py-3 text-sm text-stone-mid">{d.projects_count}</td>
-                              <td className="px-4 py-3">
-                                <div className="flex gap-2">
-                                  <button onClick={() => navigate(`/guild/designer/${d.id}`)} className="text-xs px-3 py-1.5 rounded-xl border border-border text-stone hover:border-terra/40 transition-all">Профиль</button>
-                                  {d.id !== user?.id && (
-                                    <button
-                                      onClick={() => setDmTarget({ id: d.id, name: `${d.first_name} ${d.last_name}` })}
-                                      className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-xl terra-gradient text-white hover:opacity-90 transition-all"
-                                    >
-                                      <Icon name="MessageCircle" size={12} /> Написать
-                                    </button>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                <div className="flex flex-wrap gap-2 items-center">
+                  {/* Spec filter */}
+                  <div className="flex gap-1 bg-white border border-border rounded-xl p-1">
+                    {SPEC_FILTERS.map(f => (
+                      <button
+                        key={f.value}
+                        onClick={() => setSpecFilter(f.value)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${specFilter === f.value ? "terra-gradient text-white" : "text-stone-mid hover:text-stone"}`}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+                  {/* City select */}
+                  <select
+                    value={cityFilter}
+                    onChange={e => setCityFilter(e.target.value)}
+                    className="px-3 py-2 rounded-xl border border-border bg-white text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20"
+                  >
+                    {CITY_FILTERS.map(c => <option key={c}>{c}</option>)}
+                  </select>
+                  {/* View toggle */}
+                  <div className="ml-auto flex gap-1 bg-white border border-border rounded-xl p-1">
+                    <button onClick={() => setViewMode("grid")} className={`p-1.5 rounded-lg transition-all ${viewMode === "grid" ? "terra-gradient" : "hover:bg-muted"}`}>
+                      <Icon name="LayoutGrid" size={15} className={viewMode === "grid" ? "text-white" : "text-stone-mid"} />
+                    </button>
+                    <button onClick={() => setViewMode("list")} className={`p-1.5 rounded-lg transition-all ${viewMode === "list" ? "terra-gradient" : "hover:bg-muted"}`}>
+                      <Icon name="List" size={15} className={viewMode === "list" ? "text-white" : "text-stone-mid"} />
+                    </button>
                   </div>
                 </div>
+              </div>
+
+              {/* Count */}
+              <p className="text-xs text-stone-light mb-4">Участников: {designers.length}</p>
+
+              {loading ? (
+                <div className="text-center py-12 text-stone-mid animate-pulse">
+                  Загрузка дизайнеров...
+                </div>
+              ) : designers.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-border p-12 text-center">
+                  <div className="w-16 h-16 bg-terra-pale rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <Icon name="Users" size={28} className="text-terra" />
+                  </div>
+                  <h3 className="font-display text-xl text-stone mb-2">Дизайнеры не найдены</h3>
+                  <p className="text-stone-mid text-sm">Попробуйте изменить фильтры поиска</p>
+                </div>
+              ) : (
+                <>
+                  {/* Grid view */}
+                  {viewMode === "grid" && (
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {designers.map((d: Designer, i: number) => {
+                        const color = getAvatarColor(d.id);
+                        const initials = getInitials(d.first_name, d.last_name);
+                        const specLabel = d.specialization ? (SPEC_LABELS[d.specialization] || d.specialization) : "";
+                        const workStyles = (d.work_styles || "").split(",").map(s => s.trim()).filter(Boolean);
+                        return (
+                          <div
+                            key={d.id}
+                            className="bg-white rounded-2xl border border-border p-5 hover:border-terra/30 hover:shadow-md transition-all animate-fade-in"
+                            style={{ animationDelay: `${i * 0.05}s` }}
+                          >
+                            {/* Top: avatar + name + city */}
+                            <div className="flex items-start gap-4 mb-4">
+                              <div className="flex-shrink-0">
+                                {d.avatar_url ? (
+                                  <img src={d.avatar_url} alt="" className="w-14 h-14 rounded-full object-cover" />
+                                ) : (
+                                  <div className={`w-14 h-14 rounded-full bg-gradient-to-br ${color} flex items-center justify-center text-white font-semibold`}>{initials}</div>
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <h3 className="font-semibold text-stone text-sm">{d.first_name} {d.last_name}</h3>
+                                <p className="text-xs text-stone-mid">{specLabel || "Дизайнер интерьеров"}</p>
+                                {d.city && (
+                                  <p className="flex items-center gap-1 text-xs text-stone-light mt-0.5">
+                                    <Icon name="MapPin" size={10} />{d.city}
+                                  </p>
+                                )}
+                              </div>
+                              {d.accepting_orders !== false && (
+                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 font-medium flex-shrink-0">Берёт заказы</span>
+                              )}
+                            </div>
+
+                            {/* Specialization badges */}
+                            {workStyles.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mb-3">
+                                {workStyles.slice(0, 3).map(s => (
+                                  <span key={s} className="text-[10px] px-2 py-0.5 rounded-full bg-terra-pale text-terra border border-terra/20 font-medium">{s}</span>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Stats row */}
+                            <div className="flex items-center gap-4 mb-3 text-xs text-stone-mid">
+                              {(d.experience_years ?? 0) > 0 && <span>Опыт {d.experience_years} лет</span>}
+                              <span>{d.projects_count || 0} проектов</span>
+                            </div>
+
+                            {/* Bio */}
+                            {d.bio && <p className="text-xs text-stone-mid leading-relaxed mb-4 line-clamp-2">{d.bio}</p>}
+
+                            {/* Buttons */}
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => navigate(`/guild/designer/${d.id}`)}
+                                className="flex-1 text-xs py-2 rounded-xl border border-border text-stone hover:border-terra/40 hover:text-terra transition-all font-medium"
+                              >
+                                Портфолио
+                              </button>
+                              {d.id !== user?.id && (
+                                <>
+                                  <button
+                                    onClick={() => setDmTarget({ id: d.id, name: `${d.first_name} ${d.last_name}` })}
+                                    className="flex-1 flex items-center justify-center gap-1 text-xs py-2 rounded-xl terra-gradient text-white hover:opacity-90 font-medium"
+                                  >
+                                    <Icon name="MessageCircle" size={12} /> Написать
+                                  </button>
+                                  <button
+                                    onClick={() => setDmTarget({ id: d.id, name: `${d.first_name} ${d.last_name}` })}
+                                    className="text-xs py-2 px-3 rounded-xl border border-border text-stone-mid hover:bg-muted transition-all"
+                                  >
+                                    <Icon name="UserPlus" size={12} />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* List view */}
+                  {viewMode === "list" && (
+                    <div className="space-y-3">
+                      {designers.map((d: Designer) => {
+                        const color = getAvatarColor(d.id);
+                        const initials = getInitials(d.first_name, d.last_name);
+                        const specLabel = d.specialization ? (SPEC_LABELS[d.specialization] || d.specialization) : "";
+                        const workStyles = (d.work_styles || "").split(",").map(s => s.trim()).filter(Boolean);
+                        return (
+                          <div
+                            key={d.id}
+                            className="bg-white rounded-2xl border border-border p-4 hover:border-terra/30 hover:shadow-md transition-all flex items-center gap-4"
+                          >
+                            {/* Avatar */}
+                            <div className="flex-shrink-0">
+                              {d.avatar_url ? (
+                                <img src={d.avatar_url} alt="" className="w-12 h-12 rounded-full object-cover" />
+                              ) : (
+                                <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${color} flex items-center justify-center text-white font-semibold text-sm`}>{initials}</div>
+                              )}
+                            </div>
+
+                            {/* Info */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <h3 className="font-semibold text-stone text-sm">{d.first_name} {d.last_name}</h3>
+                                {d.accepting_orders !== false && (
+                                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 font-medium">Берёт заказы</span>
+                                )}
+                              </div>
+                              <p className="text-xs text-stone-mid">{specLabel || "Дизайнер интерьеров"}</p>
+                              <div className="flex items-center gap-3 mt-1 text-xs text-stone-light">
+                                {d.city && (
+                                  <span className="flex items-center gap-1"><Icon name="MapPin" size={10} />{d.city}</span>
+                                )}
+                                {(d.experience_years ?? 0) > 0 && <span>Опыт {d.experience_years} лет</span>}
+                                <span>{d.projects_count || 0} проектов</span>
+                              </div>
+                              {workStyles.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1.5">
+                                  {workStyles.slice(0, 3).map(s => (
+                                    <span key={s} className="text-[10px] px-2 py-0.5 rounded-full bg-terra-pale text-terra border border-terra/20 font-medium">{s}</span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex gap-2 flex-shrink-0">
+                              <button
+                                onClick={() => navigate(`/guild/designer/${d.id}`)}
+                                className="text-xs px-3 py-2 rounded-xl border border-border text-stone hover:border-terra/40 hover:text-terra transition-all font-medium"
+                              >
+                                Портфолио
+                              </button>
+                              {d.id !== user?.id && (
+                                <>
+                                  <button
+                                    onClick={() => setDmTarget({ id: d.id, name: `${d.first_name} ${d.last_name}` })}
+                                    className="flex items-center gap-1 text-xs px-3 py-2 rounded-xl terra-gradient text-white hover:opacity-90 font-medium"
+                                  >
+                                    <Icon name="MessageCircle" size={12} /> Написать
+                                  </button>
+                                  <button
+                                    onClick={() => setDmTarget({ id: d.id, name: `${d.first_name} ${d.last_name}` })}
+                                    className="text-xs py-2 px-3 rounded-xl border border-border text-stone-mid hover:bg-muted transition-all"
+                                  >
+                                    <Icon name="UserPlus" size={12} />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
               )}
             </>
+          )}
+
+          {/* Forum Tab */}
+          {guildTab === "forum" && (
+            <div className="bg-white rounded-2xl border border-border p-16 text-center max-w-lg mx-auto">
+              <div className="w-20 h-20 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <Icon name="MessageSquare" size={36} className="text-stone-light" />
+              </div>
+              <h3 className="font-display text-2xl text-stone mb-2">Форум — скоро!</h3>
+              <p className="text-stone-mid text-sm mb-6">Здесь вы сможете обсуждать проекты, делиться опытом и задавать вопросы коллегам.</p>
+              <button onClick={() => alert("Мы сообщим вам о запуске форума!")} className="terra-gradient text-white px-6 py-3 rounded-xl text-sm font-medium hover:opacity-90">Узнать о запуске первым</button>
+            </div>
+          )}
+
+          {/* Events Tab */}
+          {guildTab === "events" && (
+            <div className="bg-white rounded-2xl border border-border p-16 text-center max-w-lg mx-auto">
+              <div className="w-20 h-20 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <Icon name="Calendar" size={36} className="text-stone-light" />
+              </div>
+              <h3 className="font-display text-2xl text-stone mb-2">Мероприятия — скоро!</h3>
+              <p className="text-stone-mid text-sm mb-6">Вебинары, мастер-классы и встречи сообщества дизайнеров интерьеров.</p>
+              <button onClick={() => alert("Мы сообщим вам о запуске мероприятий!")} className="terra-gradient text-white px-6 py-3 rounded-xl text-sm font-medium hover:opacity-90">Узнать о запуске первым</button>
+            </div>
           )}
         </div>
       </main>
