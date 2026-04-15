@@ -258,9 +258,11 @@ def handle_get_project(project_id, user):
             cur.execute(
                 f"""SELECT p.*, u.first_name AS designer_first_name,
                            u.last_name AS designer_last_name,
-                           u.email AS designer_email
+                           u.email AS designer_email,
+                           c.name AS client_name
                     FROM {SCHEMA}.projects p
                     JOIN {SCHEMA}.users u ON u.id = p.designer_id
+                    LEFT JOIN {SCHEMA}.clients c ON c.id = p.client_id
                     WHERE p.id = %s""",
                 (project_id,),
             )

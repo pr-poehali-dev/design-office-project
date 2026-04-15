@@ -41,6 +41,8 @@ export interface ProjectData {
   designer_first_name?: string;
   designer_last_name?: string;
   designer_email?: string;
+  client_id?: string;
+  client_name?: string;
   stages?: StageData[];
   members?: MemberData[];
 }

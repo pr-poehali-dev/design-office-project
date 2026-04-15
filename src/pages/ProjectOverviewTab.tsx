@@ -2,8 +2,9 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import Icon from "@/components/ui/icon";
 import { fmtMoney } from "./projectDetail.types";
-import { useProjectTasks, useCreateTask, useUpdateTask, useMessages, useSendMessage, useInviteMember, useDeleteProject } from "@/lib/queries";
+import { useProjectTasks, useCreateTask, useUpdateTask, useMessages, useSendMessage, useInviteMember, useDeleteProject, useUpdateProject } from "@/lib/queries";
 import { useAuth } from "@/lib/auth";
+import { getClients } from "@/lib/api";
 import type { ProjectData } from "./ProjectDetail";
 
 const STATUS_MAP: Record<string, { label: string; color: string }> = {
@@ -118,9 +119,28 @@ export function OverviewTab({ project }: OverviewProps) {
     setInviting(false);
   };
 
+  const updateProjectMutation = useUpdateProject();
+  const [showClientPicker, setShowClientPicker] = useState(false);
+  const [clientOptions, setClientOptions] = useState<{ id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    if (showClientPicker) {
+      getClients().then(data => {
+        setClientOptions((data.clients || []).map((c: { id: string; name: string }) => ({ id: c.id, name: c.name })));
+      }).catch(() => {});
+    }
+  }, [showClientPicker]);
+
+  const handleChangeClient = async (newClientId: string | null) => {
+    try {
+      await updateProjectMutation.mutateAsync({ id: project.id, data: { client_id: newClientId } });
+      setShowClientPicker(false);
+      window.location.reload();
+    } catch { /* empty */ }
+  };
+
   const statusInfo = STATUS_MAP[project.status] || STATUS_MAP.draft;
-  const clientMember = project.members?.find(m => m.role === "client");
-  const clientName = clientMember ? `${clientMember.first_name || ""} ${clientMember.last_name || ""}`.trim() : null;
+  const clientName = project.client_name || null;
 
   const infoRows = [
     clientName ? ["Клиент", clientName] : null,
@@ -155,6 +175,9 @@ export function OverviewTab({ project }: OverviewProps) {
             )}
           </div>
           <div className="flex gap-2 flex-shrink-0">
+            <button onClick={() => setShowClientPicker(true)} className="flex items-center gap-1.5 text-sm px-3.5 py-2 rounded-xl border border-border text-stone-mid hover:bg-muted transition-all">
+              <Icon name="UserCheck" size={14} /> {project.client_id ? "Сменить клиента" : "Привязать клиента"}
+            </button>
             <button onClick={() => setShowInvite(true)} className="flex items-center gap-1.5 text-sm px-3.5 py-2 rounded-xl terra-gradient text-white hover:opacity-90 transition-all">
               <Icon name="UserPlus" size={14} className="text-white" /> Пригласить
             </button>
@@ -289,6 +312,35 @@ export function OverviewTab({ project }: OverviewProps) {
               <button onClick={handleInvite} disabled={inviting} className="w-full terra-gradient text-white py-2.5 rounded-xl text-sm font-medium hover:opacity-90 disabled:opacity-50">
                 {inviting ? "Отправляем..." : "Пригласить"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showClientPicker && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 animate-scale-in">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-display text-xl text-stone">Выбрать клиента</h3>
+              <button onClick={() => setShowClientPicker(false)} className="p-1.5 hover:bg-muted rounded-lg"><Icon name="X" size={16} className="text-stone-mid" /></button>
+            </div>
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {project.client_id && (
+                <button onClick={() => handleChangeClient(null)} className="w-full text-left px-3 py-2.5 rounded-xl border border-red-200 text-red-500 text-sm hover:bg-red-50 transition-colors">
+                  Отвязать клиента
+                </button>
+              )}
+              {clientOptions.length === 0 ? (
+                <p className="text-sm text-stone-mid py-4 text-center">Нет клиентов. Добавьте в разделе Контрагенты.</p>
+              ) : clientOptions.map(c => (
+                <button
+                  key={c.id}
+                  onClick={() => handleChangeClient(c.id)}
+                  className={`w-full text-left px-3 py-2.5 rounded-xl border text-sm transition-colors ${c.id === project.client_id ? "border-terra bg-terra-pale text-terra font-medium" : "border-border text-stone hover:bg-muted"}`}
+                >
+                  {c.name}
+                </button>
+              ))}
             </div>
           </div>
         </div>
