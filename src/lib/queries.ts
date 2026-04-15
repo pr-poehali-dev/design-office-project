@@ -26,6 +26,10 @@ import {
   saveProposalTemplate,
   deleteProposalTemplate,
   updateProfile,
+  uploadAvatar,
+  getPortfolio,
+  addPortfolioItem,
+  deletePortfolioItem,
   getCompanyData,
   saveCompanyData,
   getInbox,
@@ -434,6 +438,24 @@ export function useMarkRead() {
 
 export function useUpdateProfile() {
   return useMutation({ mutationFn: updateProfile });
+}
+
+export function useUploadAvatar() {
+  return useMutation({ mutationFn: uploadAvatar });
+}
+
+export function usePortfolio() {
+  return useQuery({ queryKey: ["portfolio"], queryFn: async () => { const d = await getPortfolio(); return d.items || []; }, staleTime: STALE_5MIN });
+}
+
+export function useAddPortfolioItem() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: addPortfolioItem, onSuccess: () => { qc.invalidateQueries({ queryKey: ["portfolio"] }); } });
+}
+
+export function useDeletePortfolioItem() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: deletePortfolioItem, onSuccess: () => { qc.invalidateQueries({ queryKey: ["portfolio"] }); } });
 }
 
 export function useCompanyData() {

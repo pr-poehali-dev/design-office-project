@@ -308,6 +308,26 @@ export async function deleteProposalTemplate(id: string) {
   return handleResponse(res);
 }
 
+export async function uploadAvatar(data: { image: string; content_type: string }) {
+  const res = await fetch(`${API_URLS.auth}?action=avatar`, { method: "PUT", headers: authHeaders(), body: JSON.stringify(data) });
+  return handleResponse(res);
+}
+
+export async function getPortfolio() {
+  const res = await fetch(`${API_URLS.auth}?action=portfolio`, { method: "GET", headers: authHeaders() });
+  return handleResponse(res);
+}
+
+export async function addPortfolioItem(data: { image: string; content_type: string; title: string }) {
+  const res = await fetch(`${API_URLS.auth}?action=portfolio`, { method: "POST", headers: authHeaders(), body: JSON.stringify(data) });
+  return handleResponse(res);
+}
+
+export async function deletePortfolioItem(id: string) {
+  const res = await fetch(`${API_URLS.auth}?action=portfolio&id=${id}`, { method: "DELETE", headers: authHeaders() });
+  return handleResponse(res);
+}
+
 export async function getCompanyData() {
   const res = await fetch(`${API_URLS.auth}?action=company`, { method: "GET", headers: authHeaders() });
   return handleResponse(res);

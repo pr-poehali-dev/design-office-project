@@ -4,10 +4,12 @@ import re
 import datetime
 import hashlib
 import uuid
+import base64
 import psycopg2
 import psycopg2.extras
 import bcrypt
 import jwt
+import boto3
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 SCHEMA = os.environ.get("MAIN_DB_SCHEMA", "public")
@@ -397,6 +399,162 @@ def handle_update_profile(headers, body_str):
         conn.close()
 
 
+def get_s3_client():
+    return boto3.client(
+        "s3",
+        endpoint_url="https://bucket.poehali.dev",
+        aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
+        aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
+    )
+
+
+def get_cdn_url(key):
+    return f"https://cdn.poehali.dev/projects/{os.environ['AWS_ACCESS_KEY_ID']}/bucket/{key}"
+
+
+def handle_upload_avatar(headers, body_str):
+    """PUT /avatar — загрузка аватара."""
+    token = extract_token(headers)
+    if not token:
+        return error_response("Authorization required", 401)
+    payload = verify_token(token)
+    if not payload:
+        return error_response("Invalid or expired token", 401)
+    try:
+        body = parse_body(body_str)
+    except (json.JSONDecodeError, TypeError):
+        return error_response("Invalid JSON", 400)
+    if not body or not body.get("image"):
+        return error_response("image (base64) is required", 400)
+
+    content_type = body.get("content_type", "image/jpeg")
+    ext = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}.get(content_type, "jpg")
+    uid = payload["userId"]
+    file_key = f"avatars/{uid}.{ext}"
+    image_data = base64.b64decode(body["image"])
+
+    s3 = get_s3_client()
+    s3.put_object(Bucket="files", Key=file_key, Body=image_data, ContentType=content_type)
+    avatar_url = get_cdn_url(file_key)
+
+    conn = get_connection()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                f"UPDATE {SCHEMA}.users SET avatar_url = %s WHERE id = %s RETURNING *",
+                (avatar_url, uid),
+            )
+            user = cur.fetchone()
+            conn.commit()
+        safe_user = strip_password(dict(user))
+        return json_response({"user": safe_user, "avatar_url": avatar_url})
+    except Exception as e:
+        conn.rollback()
+        print(f"Upload avatar error: {e}")
+        return error_response("Internal server error", 500)
+    finally:
+        conn.close()
+
+
+def handle_get_portfolio(headers):
+    """GET /portfolio — список работ портфолио."""
+    token = extract_token(headers)
+    if not token:
+        return error_response("Authorization required", 401)
+    payload = verify_token(token)
+    if not payload:
+        return error_response("Invalid or expired token", 401)
+    conn = get_connection()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                f"SELECT id, title, image_url, order_number, created_at FROM {SCHEMA}.portfolio_items WHERE user_id = %s ORDER BY order_number, created_at",
+                (payload["userId"],),
+            )
+            items = [dict(r) for r in cur.fetchall()]
+        return json_response({"items": items})
+    except Exception as e:
+        print(f"Get portfolio error: {e}")
+        return error_response("Internal server error", 500)
+    finally:
+        conn.close()
+
+
+def handle_add_portfolio(headers, body_str):
+    """POST /portfolio — добавить работу в портфолио."""
+    token = extract_token(headers)
+    if not token:
+        return error_response("Authorization required", 401)
+    payload = verify_token(token)
+    if not payload:
+        return error_response("Invalid or expired token", 401)
+    try:
+        body = parse_body(body_str)
+    except (json.JSONDecodeError, TypeError):
+        return error_response("Invalid JSON", 400)
+    if not body or not body.get("image"):
+        return error_response("image (base64) is required", 400)
+
+    uid = payload["userId"]
+    content_type = body.get("content_type", "image/jpeg")
+    ext = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}.get(content_type, "jpg")
+    title = body.get("title", "")
+
+    file_id = hashlib.md5(uuid.uuid4().hex.encode()).hexdigest()[:10]
+    file_key = f"portfolio/{uid}/{file_id}.{ext}"
+    image_data = base64.b64decode(body["image"])
+
+    s3 = get_s3_client()
+    s3.put_object(Bucket="files", Key=file_key, Body=image_data, ContentType=content_type)
+    image_url = get_cdn_url(file_key)
+
+    conn = get_connection()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                f"""INSERT INTO {SCHEMA}.portfolio_items (user_id, title, image_url)
+                    VALUES (%s, %s, %s) RETURNING id, title, image_url, order_number, created_at""",
+                (uid, title, image_url),
+            )
+            item = dict(cur.fetchone())
+            conn.commit()
+        return json_response({"item": item}, 201)
+    except Exception as e:
+        conn.rollback()
+        print(f"Add portfolio error: {e}")
+        return error_response("Internal server error", 500)
+    finally:
+        conn.close()
+
+
+def handle_delete_portfolio(headers, qsp):
+    """DELETE /portfolio?id=UUID — удалить работу из портфолио."""
+    token = extract_token(headers)
+    if not token:
+        return error_response("Authorization required", 401)
+    payload = verify_token(token)
+    if not payload:
+        return error_response("Invalid or expired token", 401)
+    item_id = qsp.get("id")
+    if not item_id:
+        return error_response("id is required", 400)
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"DELETE FROM {SCHEMA}.portfolio_items WHERE id = %s AND user_id = %s",
+                (item_id, payload["userId"]),
+            )
+            conn.commit()
+        return json_response({"deleted": True})
+    except Exception as e:
+        conn.rollback()
+        print(f"Delete portfolio error: {e}")
+        return error_response("Internal server error", 500)
+    finally:
+        conn.close()
+
+
 def handle_get_company(headers):
     """GET /company — получить данные компании."""
     token = extract_token(headers)
@@ -508,6 +666,21 @@ def handler(event, context=None):
                 return handle_get_company(headers)
             if method == "PUT":
                 return handle_save_company(headers, body)
+            return error_response("Method not allowed", 400)
+
+        elif route == "avatar":
+            if method != "PUT":
+                return error_response("Method not allowed", 400)
+            return handle_upload_avatar(headers, body)
+
+        elif route == "portfolio":
+            qsp = event.get("queryStringParameters") or {}
+            if method == "GET":
+                return handle_get_portfolio(headers)
+            if method == "POST":
+                return handle_add_portfolio(headers, body)
+            if method == "DELETE":
+                return handle_delete_portfolio(headers, qsp)
             return error_response("Method not allowed", 400)
 
         else:

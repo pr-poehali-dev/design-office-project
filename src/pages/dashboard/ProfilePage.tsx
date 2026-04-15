@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Icon from "@/components/ui/icon";
 import { useAuth } from "@/lib/auth";
-import { useUpdateProfile } from "@/lib/queries";
+import { useUpdateProfile, useUploadAvatar, usePortfolio, useAddPortfolioItem, useDeletePortfolioItem } from "@/lib/queries";
 import CompanyTab from "./CompanyTab";
 
 const PROFILE_TABS = [
@@ -12,14 +12,7 @@ const PROFILE_TABS = [
 const ALL_STYLES = ["Современный", "Минимализм", "Скандинавский", "Классика", "Лофт", "Ар-деко", "Японди", "Эклектика"];
 const ALL_OBJECTS = ["Квартиры", "Дома", "Коммерция", "Офисы", "Рестораны", "Отели"];
 
-const MOCK_PORTFOLIO = [
-  { id: "1", title: "Квартира 85м²" },
-  { id: "2", title: "Студия 42м²" },
-  { id: "3", title: "Лофт 120м²" },
-  { id: "4", title: "Дом 200м²" },
-  { id: "5", title: "Офис 95м²" },
-  { id: "6", title: "Пентхаус 150м²" },
-];
+interface PortfolioItem { id: string; title: string; image_url: string; }
 
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -49,6 +42,13 @@ function guildAge(createdAt?: string) {
 export default function ProfilePage() {
   const { user, refreshUser } = useAuth();
   const updateMutation = useUpdateProfile();
+  const avatarMutation = useUploadAvatar();
+  const { data: portfolioItems = [] } = usePortfolio();
+  const addPortfolio = useAddPortfolioItem();
+  const deletePortfolio = useDeletePortfolioItem();
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const portfolioInputRef = useRef<HTMLInputElement>(null);
+
   const [activeTab, setActiveTab] = useState("card");
   const [showPreview, setShowPreview] = useState(false);
   const acceptingOrders = user?.accepting_orders !== false;
@@ -86,6 +86,33 @@ export default function ProfilePage() {
   const saveStyles = () => { save({ work_styles: editStyles.join(", "), work_objects: editObjects.join(", ") }); setEditingStyles(false); };
   const startEditHeader = () => { setHeaderForm({ first_name: user?.first_name || "", last_name: user?.last_name || "", experience_years: String(expYears) }); setEditingHeader(true); };
   const saveHeader = () => { save({ first_name: headerForm.first_name, last_name: headerForm.last_name, experience_years: Number(headerForm.experience_years) || 0 }); setEditingHeader(false); };
+
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64 = (reader.result as string).split(",")[1];
+      try { await avatarMutation.mutateAsync({ image: base64, content_type: file.type }); await refreshUser(); } catch { /* empty */ }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
+  const handlePortfolioAdd = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = (reader.result as string).split(",")[1];
+      const title = file.name.replace(/\.[^.]+$/, "");
+      addPortfolio.mutate({ image: base64, content_type: file.type, title });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
+  const portfolio = portfolioItems as PortfolioItem[];
 
   const inputCls = "w-full px-3 py-2 rounded-xl border border-border bg-background text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20";
 
@@ -126,8 +153,15 @@ export default function ProfilePage() {
               ) : (
                 <div className="flex items-start gap-5">
                   <div className="relative flex-shrink-0">
-                    <div className="w-24 h-24 terra-gradient rounded-full flex items-center justify-center text-white font-bold text-3xl">{userInitials}</div>
-                    <button className="absolute bottom-0 right-0 w-8 h-8 bg-white border border-border rounded-full flex items-center justify-center shadow-sm hover:bg-muted transition-colors"><Icon name="Camera" size={14} className="text-stone-mid" /></button>
+                    {user?.avatar_url ? (
+                      <img src={user.avatar_url} alt="" className="w-24 h-24 rounded-full object-cover" />
+                    ) : (
+                      <div className="w-24 h-24 terra-gradient rounded-full flex items-center justify-center text-white font-bold text-3xl">{userInitials}</div>
+                    )}
+                    <button onClick={() => avatarInputRef.current?.click()} disabled={avatarMutation.isPending} className="absolute bottom-0 right-0 w-8 h-8 bg-white border border-border rounded-full flex items-center justify-center shadow-sm hover:bg-muted transition-colors disabled:opacity-50">
+                      <Icon name={avatarMutation.isPending ? "Loader2" : "Camera"} size={14} className={`text-stone-mid ${avatarMutation.isPending ? "animate-spin" : ""}`} />
+                    </button>
+                    <input ref={avatarInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleAvatarChange} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between">
@@ -282,21 +316,33 @@ export default function ProfilePage() {
 
             <div className="bg-white rounded-2xl border border-border p-5">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-stone text-sm">Портфолио <span className="text-stone-light font-normal">({MOCK_PORTFOLIO.length} работ)</span></h3>
+                <h3 className="font-semibold text-stone text-sm">Портфолио <span className="text-stone-light font-normal">({portfolio.length} работ)</span></h3>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                {MOCK_PORTFOLIO.map(item => (
-                  <div key={item.id}>
-                    <div className="aspect-[4/3] bg-gradient-to-br from-terra-pale via-terra/10 to-stone/5 rounded-xl flex items-center justify-center mb-1.5">
-                      <Icon name="Image" size={24} className="text-terra/25" />
+              {portfolio.length > 0 ? (
+                <div className="grid grid-cols-2 gap-3">
+                  {portfolio.map(item => (
+                    <div key={item.id} className="group relative">
+                      <img src={item.image_url} alt={item.title} className="aspect-[4/3] w-full rounded-xl object-cover" />
+                      <button
+                        onClick={() => deletePortfolio.mutate(item.id)}
+                        className="absolute top-1.5 right-1.5 w-6 h-6 bg-black/50 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
+                      >
+                        <Icon name="X" size={12} className="text-white" />
+                      </button>
+                      <p className="text-xs text-stone-mid text-center truncate mt-1.5">{item.title}</p>
                     </div>
-                    <p className="text-xs text-stone-mid text-center truncate">{item.title}</p>
-                  </div>
-                ))}
-              </div>
-              <button className="w-full mt-4 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border-2 border-dashed border-border text-xs text-stone-mid hover:border-terra/40 hover:text-terra transition-colors">
-                <Icon name="Plus" size={14} /> Добавить работу
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <div className="w-12 h-12 bg-muted rounded-xl flex items-center justify-center mx-auto mb-2"><Icon name="Image" size={20} className="text-stone-light" /></div>
+                  <p className="text-xs text-stone-mid">Загрузите фотографии ваших работ</p>
+                </div>
+              )}
+              <button onClick={() => portfolioInputRef.current?.click()} disabled={addPortfolio.isPending} className="w-full mt-4 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border-2 border-dashed border-border text-xs text-stone-mid hover:border-terra/40 hover:text-terra transition-colors disabled:opacity-50">
+                <Icon name={addPortfolio.isPending ? "Loader2" : "Plus"} size={14} className={addPortfolio.isPending ? "animate-spin" : ""} /> {addPortfolio.isPending ? "За��рузка..." : "Добавить работу"}
               </button>
+              <input ref={portfolioInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handlePortfolioAdd} />
             </div>
           </div>
         </div>
@@ -311,17 +357,23 @@ export default function ProfilePage() {
               <button onClick={() => setShowPreview(false)} className="p-1.5 hover:bg-muted rounded-lg"><Icon name="X" size={16} className="text-stone-mid" /></button>
             </div>
             <div className="text-center mb-4">
-              <div className="w-16 h-16 terra-gradient rounded-full flex items-center justify-center text-white font-bold text-xl mx-auto mb-3">{userInitials}</div>
+              {user?.avatar_url ? (
+                <img src={user.avatar_url} alt="" className="w-16 h-16 rounded-full object-cover mx-auto mb-3" />
+              ) : (
+                <div className="w-16 h-16 terra-gradient rounded-full flex items-center justify-center text-white font-bold text-xl mx-auto mb-3">{userInitials}</div>
+              )}
               <h4 className="font-semibold text-stone">{fullName}</h4>
               <p className="text-xs text-stone-mid">{roleLabel}</p>
               {acceptingOrders && <span className="inline-block mt-1.5 text-xs px-2.5 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 font-medium">Беру заказы</span>}
               <p className="text-xs text-stone-light mt-1.5">{user?.projects_count || 0} проектов &bull; {user?.city || "—"} &bull; {expYears > 0 ? `${yearsLabel(expYears)} опыта` : "—"}</p>
             </div>
-            <div className="flex gap-2 mb-4 justify-center">
-              {MOCK_PORTFOLIO.slice(0, 2).map(item => (
-                <div key={item.id} className="w-28 h-20 bg-gradient-to-br from-terra-pale via-terra/10 to-stone/5 rounded-xl flex items-center justify-center"><Icon name="Image" size={18} className="text-terra/25" /></div>
-              ))}
-            </div>
+            {portfolio.length > 0 && (
+              <div className="flex gap-2 mb-4 justify-center">
+                {portfolio.slice(0, 2).map(item => (
+                  <img key={item.id} src={item.image_url} alt={item.title} className="w-28 h-20 rounded-xl object-cover" />
+                ))}
+              </div>
+            )}
             <div className="flex flex-wrap gap-1.5 justify-center mb-4">
               {styles.slice(0, 3).map(s => <span key={s} className="text-xs px-2 py-0.5 rounded-full bg-terra-pale text-terra border border-terra/20 font-medium">{s}</span>)}
               {styles.length === 0 && <span className="text-xs text-stone-light">Стили не указаны</span>}
