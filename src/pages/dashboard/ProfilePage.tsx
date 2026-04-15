@@ -2,6 +2,7 @@ import { useState } from "react";
 import Icon from "@/components/ui/icon";
 import { useAuth } from "@/lib/auth";
 import { useUpdateProfile } from "@/lib/queries";
+import CompanyTab from "./CompanyTab";
 
 const PROFILE_TABS = [
   { id: "card", label: "Личная карточка", icon: "UserCircle" },
@@ -102,13 +103,7 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {activeTab === "company" && (
-        <div className="bg-white rounded-2xl border border-border p-12 text-center">
-          <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4"><Icon name="Building2" size={28} className="text-stone-light" /></div>
-          <h3 className="font-display text-xl text-stone mb-2">Раздел в разработке</h3>
-          <p className="text-stone-mid text-sm">Здесь появятся реквизиты и данные вашей компании</p>
-        </div>
-      )}
+      {activeTab === "company" && <CompanyTab />}
 
       {activeTab === "card" && (
         <div className="grid md:grid-cols-[55%_1fr] gap-5">
