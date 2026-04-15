@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Icon from "@/components/ui/icon";
 import { useAuth } from "@/lib/auth";
-import { useTeam, useProjects, useInviteToTeam, useRemoveTeamMember } from "@/lib/queries";
+import { useTeam, useProjects, useInviteToTeam, useRemoveTeamMember, useInviteMember } from "@/lib/queries";
 
 const NAV_ITEMS = [
   { icon: "LayoutDashboard", label: "Дашборд", id: "dashboard", path: "/dashboard" },
@@ -81,6 +81,10 @@ export default function Team() {
   const [filterRole, setFilterRole] = useState("all");
   const [filterProject, setFilterProject] = useState("all");
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [assignMember, setAssignMember] = useState<TeamMember | null>(null);
+  const [assignProjectId, setAssignProjectId] = useState("");
+  const [assignResult, setAssignResult] = useState("");
+  const assignMutation = useInviteMember();
 
   const handleInvite = async () => {
     if (!invEmail.trim()) return;
@@ -100,6 +104,23 @@ export default function Team() {
       await removeMutation.mutateAsync(id);
     } catch { /* empty */ }
     setRemovingId(null);
+  };
+
+  const handleAssignToProject = async () => {
+    if (!assignMember || !assignProjectId) return;
+    setAssignResult("");
+    try {
+      await assignMutation.mutateAsync({ email: assignMember.email, project_id: assignProjectId, role: assignMember.team_role === "designer" ? "worker" : "worker" });
+      setAssignResult("Назначен на проект!");
+      setTimeout(() => { setAssignMember(null); setAssignResult(""); setAssignProjectId(""); }, 1200);
+    } catch (err: unknown) {
+      setAssignResult(err instanceof Error ? err.message : "Ошибка");
+    }
+  };
+
+  const getAvailableProjects = (member: TeamMember) => {
+    const memberProjectIds = new Set((member.projects || []).map(p => p.id));
+    return (projects as { id: string; title: string }[]).filter(p => !memberProjectIds.has(p.id));
   };
 
   const filtered = (members as TeamMember[]).filter(m => {
@@ -255,8 +276,8 @@ export default function Team() {
                     )}
 
                     <div className="flex gap-2 pt-3 border-t border-border">
-                      <button onClick={() => navigate(`/project/${member.projects?.[0]?.id || ""}`)} disabled={!member.projects?.length} className="flex-1 flex items-center justify-center gap-1 text-xs py-2 rounded-xl border border-border text-stone-mid hover:bg-muted transition-colors disabled:opacity-40">
-                        <Icon name="MessageCircle" size={12} /> Написать
+                      <button onClick={() => { setAssignMember(member); setAssignProjectId(""); setAssignResult(""); }} className="flex-1 flex items-center justify-center gap-1 text-xs py-2 rounded-xl terra-gradient text-white hover:opacity-90 transition-opacity">
+                        <Icon name="FolderPlus" size={12} className="text-white" /> На проект
                       </button>
                       <button onClick={() => navigate(`/guild/designer/${member.member_id}`)} className="flex-1 flex items-center justify-center gap-1 text-xs py-2 rounded-xl border border-border text-stone-mid hover:bg-muted transition-colors">
                         <Icon name="User" size={12} /> Профиль
@@ -297,6 +318,41 @@ export default function Team() {
               <button onClick={handleInvite} disabled={inviteMutation.isPending} className="w-full terra-gradient text-white py-2.5 rounded-xl text-sm font-medium hover:opacity-90 disabled:opacity-50">
                 {inviteMutation.isPending ? "Отправляем..." : "Пригласить"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {assignMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 animate-scale-in">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-display text-xl text-stone">Назначить на проект</h3>
+              <button onClick={() => { setAssignMember(null); setAssignResult(""); }} className="p-1.5 hover:bg-muted rounded-lg"><Icon name="X" size={16} className="text-stone-mid" /></button>
+            </div>
+            <p className="text-sm text-stone-mid mb-4">
+              {assignMember.first_name} {assignMember.last_name} — {TEAM_ROLES[assignMember.team_role] || assignMember.team_role}
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-stone-light mb-1 block">Выберите проект</label>
+                {getAvailableProjects(assignMember).length === 0 ? (
+                  <p className="text-xs text-stone-mid py-2">Участник уже назначен на все ваши проекты</p>
+                ) : (
+                  <select value={assignProjectId} onChange={e => setAssignProjectId(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20">
+                    <option value="">Выберите проект...</option>
+                    {getAvailableProjects(assignMember).map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+                  </select>
+                )}
+              </div>
+              {assignResult && (
+                <p className={`text-xs ${assignResult.includes("Назначен") ? "text-green-600" : "text-red-500"}`}>{assignResult}</p>
+              )}
+              {getAvailableProjects(assignMember).length > 0 && (
+                <button onClick={handleAssignToProject} disabled={!assignProjectId || assignMutation.isPending} className="w-full terra-gradient text-white py-2.5 rounded-xl text-sm font-medium hover:opacity-90 disabled:opacity-50">
+                  {assignMutation.isPending ? "Назначаем..." : "Назначить"}
+                </button>
+              )}
             </div>
           </div>
         </div>

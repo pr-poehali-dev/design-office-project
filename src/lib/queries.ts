@@ -203,8 +203,13 @@ export function useSendMessage(currentUser?: { id: string; first_name?: string; 
 }
 
 export function useInviteMember() {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: inviteMember,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["team"] });
+      qc.invalidateQueries({ queryKey: ["project"] });
+    },
   });
 }
 
