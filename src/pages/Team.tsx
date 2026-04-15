@@ -8,9 +8,9 @@ const NAV_ITEMS = [
   { icon: "LayoutDashboard", label: "Дашборд", id: "dashboard", path: "/dashboard" },
   { icon: "FolderOpen", label: "Проекты", id: "projects", path: "/dashboard" },
   { icon: "CheckSquare", label: "Задачи", id: "tasks", path: "/tasks" },
+  { icon: "Handshake", label: "Партнёры", id: "partners", path: "/partners" },
+  { icon: "Users", label: "Гильдия", id: "guild", path: "/guild" },
   { icon: "UsersRound", label: "Команда", id: "team", path: "/team" },
-  { icon: "Users", label: "Клиенты", id: "clients", path: "/dashboard" },
-  { icon: "Handshake", label: "Гильдия", id: "guild", path: "/guild" },
   { icon: "User", label: "Профиль", id: "profile", path: "/dashboard?tab=profile" },
 ];
 

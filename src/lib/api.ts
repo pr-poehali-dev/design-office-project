@@ -7,6 +7,7 @@ const API_URLS = {
   team: "https://functions.poehali.dev/a4261477-82d9-4aee-90c1-67a418897761",
   proposals: "https://functions.poehali.dev/db119ef3-ac19-49e0-bd31-0b0ddec2a678",
   projectData: "https://functions.poehali.dev/2a4b2276-c10d-4342-a98a-ceb61ec5abe8",
+  partners: "https://functions.poehali.dev/a0444403-5017-4179-b25f-fda06a4fa486",
 };
 
 function getToken(): string | null {
@@ -401,5 +402,37 @@ export async function getDesigners(params?: {
     method: "GET",
     headers: { "Content-Type": "application/json" },
   });
+  return handleResponse(res);
+}
+
+// Partners
+export async function getPartners(params?: { type?: string; search?: string; sort?: string; dir?: string; archived?: string }) {
+  const url = new URL(API_URLS.partners);
+  if (params?.type) url.searchParams.set("type", params.type);
+  if (params?.search) url.searchParams.set("search", params.search);
+  if (params?.sort) url.searchParams.set("sort", params.sort);
+  if (params?.dir) url.searchParams.set("dir", params.dir);
+  if (params?.archived) url.searchParams.set("archived", params.archived);
+  const res = await fetch(url.toString(), { method: "GET", headers: authHeaders() });
+  return handleResponse(res);
+}
+
+export async function getPartner(id: string) {
+  const res = await fetch(`${API_URLS.partners}?id=${id}`, { method: "GET", headers: authHeaders() });
+  return handleResponse(res);
+}
+
+export async function createPartner(data: Record<string, unknown>) {
+  const res = await fetch(API_URLS.partners, { method: "POST", headers: authHeaders(), body: JSON.stringify(data) });
+  return handleResponse(res);
+}
+
+export async function updatePartner(id: string, data: Record<string, unknown>) {
+  const res = await fetch(`${API_URLS.partners}?id=${id}`, { method: "PUT", headers: authHeaders(), body: JSON.stringify(data) });
+  return handleResponse(res);
+}
+
+export async function archivePartner(id: string) {
+  const res = await fetch(`${API_URLS.partners}?id=${id}&action=archive`, { method: "PUT", headers: authHeaders() });
   return handleResponse(res);
 }
