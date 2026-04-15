@@ -47,7 +47,8 @@ def handle_list_designers(query_params):
         values.append(specialization)
 
     if search:
-        conditions.append("(first_name ILIKE %s OR last_name ILIKE %s)")
+        conditions.append("(first_name ILIKE %s OR last_name ILIKE %s OR personal_id ILIKE %s)")
+        values.append(f"%{search}%")
         values.append(f"%{search}%")
         values.append(f"%{search}%")
 
@@ -58,7 +59,7 @@ def handle_list_designers(query_params):
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
                 f"""SELECT id, first_name, last_name, city, specialization,
-                           rating, projects_count, avatar_url, bio
+                           rating, projects_count, avatar_url, bio, personal_id
                     FROM {SCHEMA}.users
                     WHERE {where_clause}
                     ORDER BY rating DESC, projects_count DESC""",

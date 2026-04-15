@@ -20,6 +20,7 @@ interface User {
   bio?: string;
   rating: number;
   projects_count: number;
+  personal_id?: string;
 }
 
 interface AuthContextType {

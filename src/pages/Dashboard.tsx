@@ -308,6 +308,55 @@ export default function Dashboard() {
           </>
         )}
 
+        {activeNav === "profile" && (
+          <div className="max-w-lg">
+            <div className="bg-white rounded-2xl border border-border p-6 mb-4">
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-16 h-16 terra-gradient rounded-2xl flex items-center justify-center text-white font-bold text-xl">
+                  {userInitials}
+                </div>
+                <div>
+                  <h2 className="font-semibold text-stone text-lg">{user?.first_name} {user?.last_name}</h2>
+                  <p className="text-stone-mid text-sm">{user?.email}</p>
+                </div>
+              </div>
+              <div className="bg-muted rounded-xl p-4 mb-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-stone-light mb-1">Ваш личный ID</p>
+                    <p className="font-mono text-xl font-bold text-stone tracking-wider">{user?.personal_id || "—"}</p>
+                  </div>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(user?.personal_id || ""); }}
+                    className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-xl border border-border text-stone-mid hover:bg-white transition-colors"
+                  >
+                    <Icon name="Copy" size={13} /> Копировать
+                  </button>
+                </div>
+                <p className="text-xs text-stone-light mt-2">Поделитесь ID, чтобы вас могли найти и пригласить в проект или команду</p>
+              </div>
+              <div className="space-y-3">
+                {user?.phone && (
+                  <div className="flex items-center gap-3 text-sm">
+                    <Icon name="Phone" size={15} className="text-stone-light" />
+                    <span className="text-stone">{user.phone}</span>
+                  </div>
+                )}
+                {user?.city && (
+                  <div className="flex items-center gap-3 text-sm">
+                    <Icon name="MapPin" size={15} className="text-stone-light" />
+                    <span className="text-stone">{user.city}</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-3 text-sm">
+                  <Icon name="Briefcase" size={15} className="text-stone-light" />
+                  <span className="text-stone">{user?.role === "designer" ? "Дизайнер интерьеров" : user?.role === "client" ? "Клиент" : "Работник"}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {activeNav === "projects" && (
           <div className="mb-6">
             <div className="flex items-center justify-between mb-4">

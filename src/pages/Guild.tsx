@@ -175,7 +175,7 @@ export default function Guild() {
               <input
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Найти дизайнера..."
+                placeholder="Найти по имени или ID..."
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-border bg-white text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20 focus:border-terra"
               />
             </div>
@@ -263,6 +263,7 @@ export default function Guild() {
                                 <Icon name="MapPin" size={10} />
                                 {d.city || "Не указан"}
                               </div>
+                              {d.personal_id && <div className="text-[10px] text-stone-light font-mono">ID: {d.personal_id}</div>}
                             </div>
                           </div>
                           {specLabel && (

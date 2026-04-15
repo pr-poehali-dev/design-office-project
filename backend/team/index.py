@@ -61,6 +61,7 @@ def handle_get(user_id, qsp):
                     u.specialization,
                     u.bio,
                     u.rating,
+                    u.personal_id,
                     tm.team_role,
                     tm.accepted,
                     tm.invited_at,
@@ -111,29 +112,34 @@ def handle_get(user_id, qsp):
 
 
 def handle_post(user_id, body):
-    """Приглашение пользователя в команду по email."""
+    """Приглашение пользователя в команду по email или личному ID."""
     try:
         data = json.loads(body) if isinstance(body, str) else body
     except (json.JSONDecodeError, TypeError):
         return response(400, {"error": "Некорректный JSON"})
 
-    email = (data.get("email") or "").strip().lower()
-    if not email:
-        return response(400, {"error": "Email обязателен"})
+    email_or_id = (data.get("email") or "").strip()
+    if not email_or_id:
+        return response(400, {"error": "Email или ID обязателен"})
 
     team_role = data.get("team_role", "designer")
 
     conn = get_db()
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            # Find user by email
-            cur.execute(
-                f"SELECT id, first_name, last_name, email, phone, city, specialization, bio, rating FROM {SCHEMA}.users WHERE LOWER(email) = %s",
-                (email,),
-            )
+            if "@" in email_or_id:
+                cur.execute(
+                    f"SELECT id, first_name, last_name, email, phone, city, specialization, bio, rating, personal_id FROM {SCHEMA}.users WHERE LOWER(email) = %s",
+                    (email_or_id.lower(),),
+                )
+            else:
+                cur.execute(
+                    f"SELECT id, first_name, last_name, email, phone, city, specialization, bio, rating, personal_id FROM {SCHEMA}.users WHERE UPPER(personal_id) = %s",
+                    (email_or_id.upper(),),
+                )
             target_user = cur.fetchone()
             if not target_user:
-                return response(404, {"error": "Пользователь не найден"})
+                return response(404, {"error": "Пользователь не найден. Проверьте email или ID."})
 
             member_id = target_user["id"]
 

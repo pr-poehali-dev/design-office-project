@@ -2,6 +2,8 @@ import json
 import os
 import re
 import datetime
+import hashlib
+import uuid
 import psycopg2
 import psycopg2.extras
 import bcrypt
@@ -141,10 +143,12 @@ def handle_register(body_str):
                 password.encode("utf-8"), bcrypt.gensalt(10)
             ).decode("utf-8")
 
+            personal_id = hashlib.md5(uuid.uuid4().hex.encode()).hexdigest()[:8].upper()
+
             cur.execute(
                 f"""INSERT INTO {SCHEMA}.users
-                    (email, password_hash, role, first_name, last_name, city, specialization, phone)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    (email, password_hash, role, first_name, last_name, city, specialization, phone, personal_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING *""",
                 (
                     email.lower(),
@@ -155,6 +159,7 @@ def handle_register(body_str):
                     city or None,
                     specialization or None,
                     phone or None,
+                    personal_id,
                 ),
             )
             user = dict(cur.fetchone())
@@ -270,12 +275,12 @@ def handle_invite(headers, body_str):
     if not body:
         return error_response("Invalid JSON body", 400)
 
-    email = body.get("email")
+    email_or_id = body.get("email", "").strip()
     project_id = body.get("project_id")
     role = body.get("role")
 
-    if not email or not project_id or not role:
-        return error_response("email, project_id, and role are required", 400)
+    if not email_or_id or not project_id or not role:
+        return error_response("email (or personal ID), project_id, and role are required", 400)
 
     valid_roles = ["client", "worker"]
     if role not in valid_roles:
@@ -284,7 +289,6 @@ def handle_invite(headers, body_str):
     conn = get_connection()
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            # Verify project exists and belongs to this designer
             cur.execute(
                 f"SELECT id FROM {SCHEMA}.projects WHERE id = %s AND designer_id = %s",
                 (project_id, payload["userId"]),
@@ -294,15 +298,20 @@ def handle_invite(headers, body_str):
                     "Project not found or you are not the designer", 404
                 )
 
-            # Find the invited user
-            cur.execute(
-                f"SELECT id FROM {SCHEMA}.users WHERE email = %s",
-                (email.lower(),),
-            )
+            if "@" in email_or_id:
+                cur.execute(
+                    f"SELECT id FROM {SCHEMA}.users WHERE LOWER(email) = %s",
+                    (email_or_id.lower(),),
+                )
+            else:
+                cur.execute(
+                    f"SELECT id FROM {SCHEMA}.users WHERE UPPER(personal_id) = %s",
+                    (email_or_id.upper(),),
+                )
             invited_user = cur.fetchone()
             if not invited_user:
                 return error_response(
-                    "User with this email not found. They must register first.", 404
+                    "Пользователь не найден. Проверьте email или ID.", 404
                 )
 
             invited_user_id = invited_user["id"]

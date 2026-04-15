@@ -315,8 +315,8 @@ export default function Team() {
             </div>
             <div className="space-y-3">
               <div>
-                <label className="text-xs text-stone-light mb-1 block">Email специалиста</label>
-                <input value={invEmail} onChange={e => setInvEmail(e.target.value)} placeholder="specialist@email.com" className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20 focus:border-terra" />
+                <label className="text-xs text-stone-light mb-1 block">Email или личный ID</label>
+                <input value={invEmail} onChange={e => setInvEmail(e.target.value)} placeholder="email@example.com или 998E6648" className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20 focus:border-terra" />
               </div>
               <div>
                 <label className="text-xs text-stone-light mb-1 block">Роль</label>
