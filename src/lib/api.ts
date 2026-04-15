@@ -206,6 +206,31 @@ export async function sendMessage(data: { project_id: string; content: string })
   return handleResponse(res);
 }
 
+export async function getInbox() {
+  const res = await fetch(`${API_URLS.messages}?action=inbox`, { method: "GET", headers: authHeaders() });
+  return handleResponse(res);
+}
+
+export async function getUnreadCount() {
+  const res = await fetch(`${API_URLS.messages}?action=unread`, { method: "GET", headers: authHeaders() });
+  return handleResponse(res);
+}
+
+export async function getDmMessages(peerId: string) {
+  const res = await fetch(`${API_URLS.messages}?action=dm&peer_id=${peerId}`, { method: "GET", headers: authHeaders() });
+  return handleResponse(res);
+}
+
+export async function sendDm(data: { receiver_id: string; content: string }) {
+  const res = await fetch(`${API_URLS.messages}?action=dm`, { method: "POST", headers: authHeaders(), body: JSON.stringify(data) });
+  return handleResponse(res);
+}
+
+export async function markMessagesRead(data: { project_id?: string; peer_id?: string }) {
+  const res = await fetch(`${API_URLS.messages}?action=mark_read`, { method: "PUT", headers: authHeaders(), body: JSON.stringify(data) });
+  return handleResponse(res);
+}
+
 // Team
 export async function getTeam() {
   const res = await fetch(API_URLS.team, {

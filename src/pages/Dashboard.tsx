@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Icon from "@/components/ui/icon";
 import { useAuth } from "@/lib/auth";
-import { useProjects, useCreateProject } from "@/lib/queries";
+import { useProjects, useCreateProject, useUnreadCount } from "@/lib/queries";
+import InboxBlock from "@/components/InboxBlock";
 
 interface Project {
   id: string;
@@ -56,6 +57,7 @@ export default function Dashboard() {
 
   const { data: projects = [], isLoading: loadingProjects } = useProjects(!!user);
   const createProjectMutation = useCreateProject();
+  const { data: unreadData } = useUnreadCount();
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/login");
@@ -165,9 +167,9 @@ export default function Dashboard() {
             >
               <Icon name={item.icon} fallback="Circle" size={17} />
               <span>{item.label}</span>
-              {item.badge ? (
-                <span className="ml-auto w-5 h-5 terra-gradient rounded-full text-white text-xs flex items-center justify-center">
-                  {item.badge}
+              {item.id === "dashboard" && unreadData?.total_unread > 0 ? (
+                <span className="ml-auto w-5 h-5 bg-red-500 rounded-full text-white text-xs flex items-center justify-center">
+                  {unreadData.total_unread > 9 ? "9+" : unreadData.total_unread}
                 </span>
               ) : null}
             </button>
@@ -195,7 +197,12 @@ export default function Dashboard() {
               activeNav === item.id ? "text-terra" : "text-stone-light"
             }`}
           >
-            <Icon name={item.icon} fallback="Circle" size={19} />
+            <div className="relative">
+              <Icon name={item.icon} fallback="Circle" size={19} />
+              {item.id === "dashboard" && unreadData?.total_unread > 0 && (
+                <span className="absolute -top-1 -right-1.5 w-3.5 h-3.5 bg-red-500 rounded-full text-white text-[8px] flex items-center justify-center">{unreadData.total_unread > 9 ? "+" : unreadData.total_unread}</span>
+              )}
+            </div>
             <span className="text-xs">{item.label}</span>
           </button>
         ))}
@@ -248,8 +255,12 @@ export default function Dashboard() {
           ))}
         </div>
 
-        {/* Projects */}
-        <div className="mb-6">
+        {/* Inbox + Projects grid */}
+        <div className="grid lg:grid-cols-3 gap-6 mb-6">
+          <div className="lg:col-span-1">
+            <InboxBlock />
+          </div>
+          <div className="lg:col-span-2">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-body font-semibold text-stone">Текущие проекты</h2>
           </div>
@@ -324,6 +335,7 @@ export default function Dashboard() {
               })}
             </div>
           )}
+          </div>
         </div>
       </main>
 

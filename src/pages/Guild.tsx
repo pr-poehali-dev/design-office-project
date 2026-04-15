@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Icon from "@/components/ui/icon";
 import { useAuth } from "@/lib/auth";
-import { useDesigners } from "@/lib/queries";
+import { useDesigners, useSendDm } from "@/lib/queries";
 
 interface Designer {
   id: string;
@@ -88,6 +88,11 @@ export default function Guild() {
   const [specFilter, setSpecFilter] = useState("");
   const [cityFilter, setCityFilter] = useState("Все города");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [dmTarget, setDmTarget] = useState<{id: string, name: string} | null>(null);
+  const [dmInput, setDmInput] = useState("");
+  const [dmSending, setDmSending] = useState(false);
+
+  const sendDmMutation = useSendDm(user ? { id: user.id, first_name: user.first_name, last_name: user.last_name } : undefined);
 
   const params = {
     specialization: specFilter || undefined,
@@ -276,9 +281,14 @@ export default function Guild() {
                             >
                               Профиль
                             </button>
-                            <button className="flex-1 text-xs py-2 rounded-xl terra-gradient text-white hover:opacity-90 transition-all font-medium">
-                              Написать
-                            </button>
+                            {d.id !== user?.id && (
+                              <button
+                                onClick={() => setDmTarget({ id: d.id, name: `${d.first_name} ${d.last_name}` })}
+                                className="flex-1 flex items-center justify-center gap-1 text-xs py-2 rounded-xl terra-gradient text-white hover:opacity-90 transition-all font-medium"
+                              >
+                                <Icon name="MessageCircle" size={12} /> Написать
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -322,7 +332,14 @@ export default function Guild() {
                               <td className="px-4 py-3">
                                 <div className="flex gap-2">
                                   <button onClick={() => navigate(`/guild/designer/${d.id}`)} className="text-xs px-3 py-1.5 rounded-xl border border-border text-stone hover:border-terra/40 transition-all">Профиль</button>
-                                  <button className="text-xs px-3 py-1.5 rounded-xl terra-gradient text-white hover:opacity-90 transition-all">Написать</button>
+                                  {d.id !== user?.id && (
+                                    <button
+                                      onClick={() => setDmTarget({ id: d.id, name: `${d.first_name} ${d.last_name}` })}
+                                      className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-xl terra-gradient text-white hover:opacity-90 transition-all"
+                                    >
+                                      <Icon name="MessageCircle" size={12} /> Написать
+                                    </button>
+                                  )}
                                 </div>
                               </td>
                             </tr>
@@ -337,6 +354,35 @@ export default function Guild() {
           )}
         </div>
       </main>
+
+      {/* DM Modal */}
+      {dmTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 animate-scale-in">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-display text-xl text-stone">Написать {dmTarget.name}</h3>
+              <button onClick={() => { setDmTarget(null); setDmInput(""); }} className="p-1.5 hover:bg-muted rounded-lg"><Icon name="X" size={16} className="text-stone-mid" /></button>
+            </div>
+            <textarea value={dmInput} onChange={e => setDmInput(e.target.value)} placeholder="Ваше сообщение..." rows={4} className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20 resize-none mb-3" autoFocus />
+            <button
+              onClick={async () => {
+                if (!dmInput.trim()) return;
+                setDmSending(true);
+                try {
+                  await sendDmMutation.mutateAsync({ receiver_id: dmTarget.id, content: dmInput.trim() });
+                  setDmTarget(null);
+                  setDmInput("");
+                } catch { /* empty */ }
+                setDmSending(false);
+              }}
+              disabled={!dmInput.trim() || dmSending}
+              className="w-full terra-gradient text-white py-2.5 rounded-xl text-sm font-medium hover:opacity-90 disabled:opacity-50"
+            >
+              {dmSending ? "Отправка..." : "Отправить"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Mobile bottom nav */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-border px-1 py-2 flex justify-around">

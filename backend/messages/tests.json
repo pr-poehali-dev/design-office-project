@@ -1,1 +1,8 @@
-{"tests": [{"name": "List messages", "method": "GET", "path": "/?project_id=test", "expectedStatus": 401}]}
+{"tests": [
+  {"name": "List messages requires auth", "method": "GET", "path": "/?project_id=test", "expectedStatus": 401},
+  {"name": "Inbox requires auth", "method": "GET", "path": "/?action=inbox", "expectedStatus": 401},
+  {"name": "Unread count requires auth", "method": "GET", "path": "/?action=unread", "expectedStatus": 401},
+  {"name": "DM list requires auth", "method": "GET", "path": "/?action=dm&peer_id=test", "expectedStatus": 401},
+  {"name": "Send DM requires auth", "method": "POST", "path": "/?action=dm", "expectedStatus": 401, "body": {"receiver_id": "test", "content": "hi"}},
+  {"name": "Mark read requires auth", "method": "PUT", "path": "/?action=mark_read", "expectedStatus": 401, "body": {"project_id": "test"}}
+]}

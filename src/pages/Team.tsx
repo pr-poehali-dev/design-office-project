@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Icon from "@/components/ui/icon";
 import { useAuth } from "@/lib/auth";
-import { useTeam, useProjects, useInviteToTeam, useRemoveTeamMember, useInviteMember } from "@/lib/queries";
+import { useTeam, useProjects, useInviteToTeam, useRemoveTeamMember, useInviteMember, useSendDm } from "@/lib/queries";
 
 const NAV_ITEMS = [
   { icon: "LayoutDashboard", label: "Дашборд", id: "dashboard", path: "/dashboard" },
@@ -85,6 +85,10 @@ export default function Team() {
   const [assignProjectId, setAssignProjectId] = useState("");
   const [assignResult, setAssignResult] = useState("");
   const assignMutation = useInviteMember();
+  const [dmTarget, setDmTarget] = useState<{id: string, name: string} | null>(null);
+  const [dmInput, setDmInput] = useState("");
+  const [dmSending, setDmSending] = useState(false);
+  const sendDmMutation = useSendDm(user ? { id: user.id, first_name: user.first_name, last_name: user.last_name } : undefined);
 
   const handleInvite = async () => {
     if (!invEmail.trim()) return;
@@ -279,8 +283,16 @@ export default function Team() {
                       <button onClick={() => { setAssignMember(member); setAssignProjectId(""); setAssignResult(""); }} className="flex-1 flex items-center justify-center gap-1 text-xs py-2 rounded-xl terra-gradient text-white hover:opacity-90 transition-opacity">
                         <Icon name="FolderPlus" size={12} className="text-white" /> На проект
                       </button>
-                      <button onClick={() => navigate(`/guild/designer/${member.member_id}`)} className="flex-1 flex items-center justify-center gap-1 text-xs py-2 rounded-xl border border-border text-stone-mid hover:bg-muted transition-colors">
-                        <Icon name="User" size={12} /> Профиль
+                      {member.member_id !== user?.id && (
+                        <button
+                          onClick={() => setDmTarget({ id: member.member_id, name: `${member.first_name} ${member.last_name}` })}
+                          className="flex-1 flex items-center justify-center gap-1 text-xs py-2 rounded-xl border border-border text-stone-mid hover:bg-muted transition-colors"
+                        >
+                          <Icon name="MessageCircle" size={12} /> Написать
+                        </button>
+                      )}
+                      <button onClick={() => navigate(`/guild/designer/${member.member_id}`)} className="flex items-center justify-center gap-1 text-xs py-2 px-3 rounded-xl border border-border text-stone-mid hover:bg-muted transition-colors">
+                        <Icon name="User" size={12} />
                       </button>
                       <button onClick={() => handleRemove(member.id)} disabled={removingId === member.id} className="flex items-center justify-center gap-1 text-xs py-2 px-3 rounded-xl border border-red-200 text-red-400 hover:bg-red-50 transition-colors disabled:opacity-40">
                         <Icon name="UserMinus" size={12} />
@@ -354,6 +366,35 @@ export default function Team() {
                 </button>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* DM Modal */}
+      {dmTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 animate-scale-in">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-display text-xl text-stone">Написать {dmTarget.name}</h3>
+              <button onClick={() => { setDmTarget(null); setDmInput(""); }} className="p-1.5 hover:bg-muted rounded-lg"><Icon name="X" size={16} className="text-stone-mid" /></button>
+            </div>
+            <textarea value={dmInput} onChange={e => setDmInput(e.target.value)} placeholder="Ваше сообщение..." rows={4} className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20 resize-none mb-3" autoFocus />
+            <button
+              onClick={async () => {
+                if (!dmInput.trim()) return;
+                setDmSending(true);
+                try {
+                  await sendDmMutation.mutateAsync({ receiver_id: dmTarget.id, content: dmInput.trim() });
+                  setDmTarget(null);
+                  setDmInput("");
+                } catch { /* empty */ }
+                setDmSending(false);
+              }}
+              disabled={!dmInput.trim() || dmSending}
+              className="w-full terra-gradient text-white py-2.5 rounded-xl text-sm font-medium hover:opacity-90 disabled:opacity-50"
+            >
+              {dmSending ? "Отправка..." : "Отправить"}
+            </button>
           </div>
         </div>
       )}

@@ -25,6 +25,11 @@ import {
   getProposalTemplates,
   saveProposalTemplate,
   deleteProposalTemplate,
+  getInbox,
+  getUnreadCount,
+  getDmMessages,
+  sendDm,
+  markMessagesRead,
 } from "./api";
 
 const STALE_5MIN = 5 * 60 * 1000;
@@ -337,5 +342,79 @@ export function useDeleteProposalTemplate() {
   return useMutation({
     mutationFn: deleteProposalTemplate,
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["proposal-templates"] }); },
+  });
+}
+
+export function useInbox() {
+  return useQuery({
+    queryKey: ["inbox"],
+    queryFn: async () => {
+      const data = await getInbox();
+      return { project_messages: data.project_messages || [], dm_conversations: data.dm_conversations || [] };
+    },
+    staleTime: 30 * 1000,
+    refetchInterval: 30 * 1000,
+  });
+}
+
+export function useUnreadCount() {
+  return useQuery({
+    queryKey: ["unread-count"],
+    queryFn: getUnreadCount,
+    staleTime: 30 * 1000,
+    refetchInterval: 30 * 1000,
+  });
+}
+
+export function useDmMessages(peerId: string | undefined) {
+  return useQuery({
+    queryKey: ["dm", peerId],
+    queryFn: async () => {
+      const data = await getDmMessages(peerId!);
+      return data.messages || [];
+    },
+    enabled: !!peerId,
+    staleTime: 15 * 1000,
+    refetchInterval: 15 * 1000,
+  });
+}
+
+export function useSendDm(currentUser?: { id: string; first_name?: string; last_name?: string }) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: sendDm,
+    onMutate: async (vars) => {
+      const key = ["dm", vars.receiver_id];
+      await qc.cancelQueries({ queryKey: key });
+      const prev = qc.getQueryData(key);
+      if (currentUser) {
+        qc.setQueryData(key, (old: unknown) => {
+          const list = Array.isArray(old) ? old : [];
+          return [...list, {
+            id: `temp-${Date.now()}`, content: vars.content,
+            sender_id: currentUser.id, receiver_id: vars.receiver_id,
+            sender_first_name: currentUser.first_name || "", sender_last_name: currentUser.last_name || "",
+            is_read: false, created_at: new Date().toISOString(),
+          }];
+        });
+      }
+      return { prev };
+    },
+    onError: (_e, vars, ctx) => { if (ctx?.prev) qc.setQueryData(["dm", vars.receiver_id], ctx.prev); },
+    onSettled: (_r, _e, vars) => {
+      qc.invalidateQueries({ queryKey: ["dm", vars.receiver_id] });
+      qc.invalidateQueries({ queryKey: ["inbox"] });
+    },
+  });
+}
+
+export function useMarkRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: markMessagesRead,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["unread-count"] });
+      qc.invalidateQueries({ queryKey: ["inbox"] });
+    },
   });
 }
