@@ -167,21 +167,39 @@ export function OverviewTab({ project }: OverviewProps) {
 
       {/* 3 widgets */}
       <div className="grid md:grid-cols-3 gap-5">
-        {/* Finance */}
-        <div className="bg-white rounded-2xl border border-border p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-7 h-7 terra-gradient rounded-lg flex items-center justify-center"><Icon name="Wallet" size={13} className="text-white" /></div>
-            <span className="font-semibold text-stone text-sm">Финансы</span>
+        {/* Chat */}
+        <div className="bg-white rounded-2xl border border-border p-5 flex flex-col">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-7 h-7 terra-gradient rounded-lg flex items-center justify-center"><Icon name="MessageCircle" size={13} className="text-white" /></div>
+            <span className="font-semibold text-stone text-sm">Чат</span>
           </div>
-          <div className="space-y-2.5 mb-4">
-            {([["Стоимость", project.budget || 0, "text-stone"], ["Оплачено", 0, "text-green-600"], ["Осталось", project.budget || 0, "text-amber-600"]] as [string, number, string][]).map(([label, val, cls]) => (
-              <div key={label} className="flex justify-between items-center">
-                <span className="text-xs text-stone-mid">{label}</span>
-                <span className={`text-sm font-semibold ${cls}`}>{fmtMoney(val)}</span>
+
+          <div ref={chatRef} className="flex-1 space-y-2 overflow-y-auto max-h-44 mb-3">
+            {messages.length === 0 ? (
+              <div className="flex flex-col items-center py-6 text-center">
+                <div className="w-10 h-10 bg-muted rounded-xl flex items-center justify-center mb-2"><Icon name="MessagesSquare" size={18} className="text-stone-light" /></div>
+                <p className="text-xs text-stone-mid">Нет сообщений</p>
               </div>
-            ))}
+            ) : messages.map(msg => {
+              const isMe = msg.sender_id === user?.id;
+              return (
+                <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+                  <div className={`max-w-[80%] rounded-xl px-2.5 py-1.5 ${isMe ? "terra-gradient" : "bg-muted"}`}>
+                    {!isMe && <p className="text-xs font-semibold mb-0.5" style={{ color: isMe ? "white" : "#3D3028" }}>{msg.sender_first_name}</p>}
+                    <p className={`text-xs ${isMe ? "text-white" : "text-stone"}`}>{msg.content}</p>
+                    <p className={`text-xs mt-0.5 ${isMe ? "text-white/60" : "text-stone-light"}`}>{formatTime(msg.created_at)}</p>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-          <div className="h-2 bg-muted rounded-full overflow-hidden"><div className="h-full bg-green-400 rounded-full" style={{ width: "0%" }} /></div>
+
+          <div className="flex gap-2">
+            <input value={msgInput} onChange={e => setMsgInput(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSendMsg()} placeholder="Сообщение..." className="flex-1 px-3 py-2 rounded-xl border border-border bg-background text-stone text-xs focus:outline-none focus:ring-2 focus:ring-terra/20 focus:border-terra" />
+            <button onClick={handleSendMsg} disabled={sendingMsg} className="terra-gradient text-white p-2 rounded-xl hover:opacity-90 transition-opacity disabled:opacity-50">
+              <Icon name="Send" size={13} className="text-white" />
+            </button>
+          </div>
         </div>
 
         {/* Tasks kanban */}
@@ -227,39 +245,21 @@ export function OverviewTab({ project }: OverviewProps) {
           )}
         </div>
 
-        {/* Chat */}
-        <div className="bg-white rounded-2xl border border-border p-5 flex flex-col">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-7 h-7 terra-gradient rounded-lg flex items-center justify-center"><Icon name="MessageCircle" size={13} className="text-white" /></div>
-            <span className="font-semibold text-stone text-sm">Чат</span>
+        {/* Finance */}
+        <div className="bg-white rounded-2xl border border-border p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-7 h-7 terra-gradient rounded-lg flex items-center justify-center"><Icon name="Wallet" size={13} className="text-white" /></div>
+            <span className="font-semibold text-stone text-sm">Финансы</span>
           </div>
-
-          <div ref={chatRef} className="flex-1 space-y-2 overflow-y-auto max-h-44 mb-3">
-            {messages.length === 0 ? (
-              <div className="flex flex-col items-center py-6 text-center">
-                <div className="w-10 h-10 bg-muted rounded-xl flex items-center justify-center mb-2"><Icon name="MessagesSquare" size={18} className="text-stone-light" /></div>
-                <p className="text-xs text-stone-mid">Нет сообщений</p>
+          <div className="space-y-2.5 mb-4">
+            {([["Стоимость", project.budget || 0, "text-stone"], ["Оплачено", 0, "text-green-600"], ["Осталось", project.budget || 0, "text-amber-600"]] as [string, number, string][]).map(([label, val, cls]) => (
+              <div key={label} className="flex justify-between items-center">
+                <span className="text-xs text-stone-mid">{label}</span>
+                <span className={`text-sm font-semibold ${cls}`}>{fmtMoney(val)}</span>
               </div>
-            ) : messages.map(msg => {
-              const isMe = msg.sender_id === user?.id;
-              return (
-                <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[80%] rounded-xl px-2.5 py-1.5 ${isMe ? "terra-gradient" : "bg-muted"}`}>
-                    {!isMe && <p className="text-xs font-semibold mb-0.5" style={{ color: isMe ? "white" : "#3D3028" }}>{msg.sender_first_name}</p>}
-                    <p className={`text-xs ${isMe ? "text-white" : "text-stone"}`}>{msg.content}</p>
-                    <p className={`text-xs mt-0.5 ${isMe ? "text-white/60" : "text-stone-light"}`}>{formatTime(msg.created_at)}</p>
-                  </div>
-                </div>
-              );
-            })}
+            ))}
           </div>
-
-          <div className="flex gap-2">
-            <input value={msgInput} onChange={e => setMsgInput(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSendMsg()} placeholder="Сообщение..." className="flex-1 px-3 py-2 rounded-xl border border-border bg-background text-stone text-xs focus:outline-none focus:ring-2 focus:ring-terra/20 focus:border-terra" />
-            <button onClick={handleSendMsg} disabled={sendingMsg} className="terra-gradient text-white p-2 rounded-xl hover:opacity-90 transition-opacity disabled:opacity-50">
-              <Icon name="Send" size={13} className="text-white" />
-            </button>
-          </div>
+          <div className="h-2 bg-muted rounded-full overflow-hidden"><div className="h-full bg-green-400 rounded-full" style={{ width: "0%" }} /></div>
         </div>
       </div>
 
