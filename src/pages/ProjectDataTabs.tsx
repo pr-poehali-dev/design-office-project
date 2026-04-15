@@ -1,6 +1,21 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Icon from "@/components/ui/icon";
 import { STYLE_OPTIONS, fmtMoney } from "./projectDetail.types";
+import { useAuth } from "@/lib/auth";
+import {
+  useEstimate,
+  useAddEstimateItem,
+  useDeleteEstimateItem,
+  usePayments,
+  useAddPayment,
+  useUpdatePayment,
+  useDeletePayment,
+  useDocuments,
+  useUploadDocument,
+  useDeleteDocument,
+} from "@/lib/queries";
+
+/* ─── Shared EmptyState ─── */
 
 function EmptyState({ icon, title, subtitle, action, onAction }: {
   icon: string; title: string; subtitle: string; action?: string; onAction?: () => void;
@@ -23,6 +38,8 @@ function EmptyState({ icon, title, subtitle, action, onAction }: {
     </div>
   );
 }
+
+/* ─── BriefTab (unchanged) ─── */
 
 export function BriefTab() {
   const [selectedStyles, setSelectedStyles] = useState<string[]>([]);
@@ -159,88 +176,683 @@ export function BriefTab() {
   );
 }
 
-export function EstimateTab() {
+/* ─── Types ─── */
+
+interface EstimateItem {
+  id: string;
+  category: string;
+  name: string;
+  quantity: number;
+  unit: string;
+  price_per_unit: number;
+  total: number;
+}
+
+interface Payment {
+  id: string;
+  type: "income" | "expense";
+  description: string;
+  amount: number;
+  status: "pending" | "paid" | "overdue";
+  due_date?: string;
+  paid_date?: string;
+  category?: string;
+}
+
+interface Document {
+  id: string;
+  type: "uploaded" | "generated";
+  title: string;
+  generated_url?: string;
+  signed_url?: string;
+  status?: string;
+  created_at: string;
+}
+
+/* ─── EstimateTab ─── */
+
+export function EstimateTab({ projectId }: { projectId: string }) {
+  const { user } = useAuth();
+  const isDesigner = user?.role === "designer";
+
+  const { data, isLoading } = useEstimate(projectId);
+  const addMutation = useAddEstimateItem();
+  const deleteMutation = useDeleteEstimateItem();
+
+  const items: EstimateItem[] = data?.items || [];
+  const totalSum = data?.estimate?.total ?? items.reduce((s, i) => s + (i.total || 0), 0);
+
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ name: "", category: "", quantity: "", unit: "", price_per_unit: "" });
+
+  const grouped = items.reduce<Record<string, EstimateItem[]>>((acc, item) => {
+    const cat = item.category || "Без категории";
+    if (!acc[cat]) acc[cat] = [];
+    acc[cat].push(item);
+    return acc;
+  }, {});
+
+  const handleAdd = () => {
+    if (!form.name || !form.quantity || !form.price_per_unit) return;
+    addMutation.mutate({
+      projectId,
+      data: {
+        name: form.name,
+        category: form.category || "Без категории",
+        quantity: Number(form.quantity),
+        unit: form.unit || "шт",
+        price_per_unit: Number(form.price_per_unit),
+      },
+    }, {
+      onSuccess: () => {
+        setForm({ name: "", category: "", quantity: "", unit: "", price_per_unit: "" });
+        setShowForm(false);
+      },
+    });
+  };
+
+  const handleDelete = (itemId: string) => {
+    deleteMutation.mutate({ projectId, itemId });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Icon name="Loader2" size={22} className="text-terra animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div className="text-sm text-stone-mid">Итого: <span className="font-display text-xl font-semibold text-stone">0 ₽</span></div>
+        <div className="text-sm text-stone-mid">
+          Итого: <span className="font-display text-xl font-semibold text-stone">{fmtMoney(totalSum)}</span>
+        </div>
         <div className="flex gap-2">
-          <button className="flex items-center gap-1.5 text-sm px-3.5 py-2 rounded-xl border border-border text-stone hover:border-terra/40 transition-all">
-            <Icon name="Plus" size={14} /> Добавить
-          </button>
+          {isDesigner && (
+            <button
+              onClick={() => setShowForm(v => !v)}
+              className="flex items-center gap-1.5 text-sm px-3.5 py-2 rounded-xl border border-border text-stone hover:border-terra/40 transition-all"
+            >
+              <Icon name="Plus" size={14} /> Добавить
+            </button>
+          )}
           <button className="flex items-center gap-1.5 text-sm px-3.5 py-2 rounded-xl terra-gradient text-white hover:opacity-90 transition-all">
             <Icon name="Download" size={14} className="text-white" /> PDF
           </button>
         </div>
       </div>
-      <EmptyState
-        icon="Receipt"
-        title="Смета не заполнена"
-        subtitle="Добавьте позиции в смету проекта"
-        action="Добавить позицию"
-      />
+
+      {/* Inline add form */}
+      {showForm && (
+        <div className="bg-white rounded-2xl border border-border p-5 space-y-3">
+          <h4 className="font-semibold text-stone text-sm">Новая позиция</h4>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-stone-light mb-1 block">Название *</label>
+              <input
+                value={form.name}
+                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                placeholder="Ламинат дубовый"
+                className="w-full px-3 py-2 rounded-xl border border-border bg-background text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20 focus:border-terra"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-stone-light mb-1 block">Категория</label>
+              <input
+                value={form.category}
+                onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
+                placeholder="Материалы"
+                className="w-full px-3 py-2 rounded-xl border border-border bg-background text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20 focus:border-terra"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-stone-light mb-1 block">Количество *</label>
+              <input
+                type="number"
+                value={form.quantity}
+                onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))}
+                placeholder="10"
+                className="w-full px-3 py-2 rounded-xl border border-border bg-background text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20 focus:border-terra"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-stone-light mb-1 block">Единица</label>
+              <input
+                value={form.unit}
+                onChange={e => setForm(f => ({ ...f, unit: e.target.value }))}
+                placeholder="м²"
+                className="w-full px-3 py-2 rounded-xl border border-border bg-background text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20 focus:border-terra"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-stone-light mb-1 block">Цена за единицу *</label>
+              <input
+                type="number"
+                value={form.price_per_unit}
+                onChange={e => setForm(f => ({ ...f, price_per_unit: e.target.value }))}
+                placeholder="1500"
+                className="w-full px-3 py-2 rounded-xl border border-border bg-background text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20 focus:border-terra"
+              />
+            </div>
+          </div>
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={handleAdd}
+              disabled={addMutation.isPending}
+              className="terra-gradient text-white font-medium px-5 py-2 rounded-xl hover:opacity-90 transition-all text-sm disabled:opacity-60"
+            >
+              {addMutation.isPending ? "Сохранение..." : "Добавить позицию"}
+            </button>
+            <button
+              onClick={() => setShowForm(false)}
+              className="px-5 py-2 rounded-xl border border-border text-stone-mid text-sm hover:bg-muted transition-colors"
+            >
+              Отмена
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Items grouped by category */}
+      {items.length === 0 ? (
+        <EmptyState
+          icon="Receipt"
+          title="Смета не заполнена"
+          subtitle="Добавьте позиции в смету проекта"
+          action={isDesigner ? "Добавить позицию" : undefined}
+          onAction={() => setShowForm(true)}
+        />
+      ) : (
+        Object.entries(grouped).map(([category, catItems]) => {
+          const catTotal = catItems.reduce((s, i) => s + (i.total || 0), 0);
+          return (
+            <div key={category} className="bg-white rounded-2xl border border-border overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-3 bg-muted/50 border-b border-border">
+                <span className="text-sm font-semibold text-stone">{category}</span>
+                <span className="text-sm font-medium text-stone-mid">{fmtMoney(catTotal)}</span>
+              </div>
+              <div className="divide-y divide-border">
+                {catItems.map(item => (
+                  <div key={item.id} className="flex items-center justify-between px-5 py-3 group">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-stone font-medium truncate">{item.name}</p>
+                      <p className="text-xs text-stone-light">
+                        {item.quantity} {item.unit} x {fmtMoney(item.price_per_unit)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-semibold text-stone whitespace-nowrap">{fmtMoney(item.total)}</span>
+                      {isDesigner && (
+                        <button
+                          onClick={() => handleDelete(item.id)}
+                          disabled={deleteMutation.isPending}
+                          className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg hover:bg-red-50 text-stone-light hover:text-red-500 transition-all"
+                        >
+                          <Icon name="Trash2" size={14} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })
+      )}
     </div>
   );
 }
 
-export function FinanceTab() {
+/* ─── FinanceTab ─── */
+
+const PAYMENT_STATUS_MAP: Record<string, { label: string; color: string }> = {
+  pending: { label: "Ожидает", color: "bg-amber-50 text-amber-700 border-amber-200" },
+  paid: { label: "Оплачено", color: "bg-green-50 text-green-700 border-green-200" },
+  overdue: { label: "Просрочено", color: "bg-red-50 text-red-600 border-red-200" },
+};
+
+export function FinanceTab({ projectId }: { projectId: string }) {
+  const { user } = useAuth();
+  const isDesigner = user?.role === "designer";
+
+  const { data, isLoading } = usePayments(projectId);
+  const addMutation = useAddPayment();
+  const updateMutation = useUpdatePayment();
+  const deleteMutation = useDeletePayment();
+
+  const payments: Payment[] = data?.payments || [];
+
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({
+    description: "",
+    amount: "",
+    type: "income" as "income" | "expense",
+    status: "pending" as "pending" | "paid" | "overdue",
+    due_date: "",
+    category: "",
+  });
+
+  const totalIncome = payments.filter(p => p.type === "income").reduce((s, p) => s + p.amount, 0);
+  const paidIncome = payments.filter(p => p.type === "income" && p.status === "paid").reduce((s, p) => s + p.amount, 0);
+  const pendingIncome = payments.filter(p => p.type === "income" && p.status !== "paid").reduce((s, p) => s + p.amount, 0);
+  const totalExpense = payments.filter(p => p.type === "expense").reduce((s, p) => s + p.amount, 0);
+
+  const summaryCards = [
+    { label: "Стоимость проекта", value: totalIncome, icon: "Wallet", color: "text-stone" },
+    { label: "Оплачено", value: paidIncome, icon: "CheckCircle", color: "text-green-600" },
+    { label: "К оплате", value: pendingIncome, icon: "Clock", color: "text-amber-600" },
+    { label: "Расходы", value: totalExpense, icon: "TrendingDown", color: "text-red-500" },
+  ];
+
+  const handleAdd = () => {
+    if (!form.description || !form.amount) return;
+    addMutation.mutate({
+      projectId,
+      data: {
+        description: form.description,
+        amount: Number(form.amount),
+        type: form.type,
+        status: form.status,
+        due_date: form.due_date || undefined,
+        category: form.category || undefined,
+      },
+    }, {
+      onSuccess: () => {
+        setForm({ description: "", amount: "", type: "income", status: "pending", due_date: "", category: "" });
+        setShowForm(false);
+      },
+    });
+  };
+
+  const handleToggleStatus = (payment: Payment) => {
+    if (!isDesigner) return;
+    const newStatus = payment.status === "pending" ? "paid" : "pending";
+    updateMutation.mutate({
+      projectId,
+      paymentId: payment.id,
+      data: {
+        status: newStatus,
+        ...(newStatus === "paid" ? { paid_date: new Date().toISOString().split("T")[0] } : { paid_date: null }),
+      },
+    });
+  };
+
+  const handleDelete = (paymentId: string) => {
+    deleteMutation.mutate({ projectId, paymentId });
+  };
+
+  const formatDate = (d?: string) => {
+    if (!d) return "";
+    return new Date(d).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Icon name="Loader2" size={22} className="text-terra animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
+      {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {[
-          { label: "Стоимость проекта", value: 0, color: "text-stone", icon: "TrendingUp" },
-          { label: "Оплачено клиентом", value: 0, color: "text-green-600", icon: "CheckCircle" },
-          { label: "Расходы", value: 0, color: "text-red-500", icon: "ArrowDownCircle" },
-          { label: "Прибыль", value: 0, color: "text-terra", icon: "Sparkles" },
-        ].map(s => (
-          <div key={s.label} className="bg-white rounded-2xl border border-border p-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-stone-light leading-tight">{s.label}</span>
-              <Icon name={s.icon} fallback="Circle" size={14} className={s.color} />
+        {summaryCards.map(card => (
+          <div key={card.label} className="bg-white rounded-2xl border border-border p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-8 h-8 bg-muted rounded-xl flex items-center justify-center">
+                <Icon name={card.icon} fallback="Circle" size={16} className="text-stone-light" />
+              </div>
             </div>
-            <div className={`font-display text-xl font-semibold ${s.color}`}>{fmtMoney(s.value)}</div>
+            <p className="text-xs text-stone-light mb-0.5">{card.label}</p>
+            <p className={`font-display text-lg font-semibold ${card.color}`}>{fmtMoney(card.value)}</p>
           </div>
         ))}
       </div>
 
-      <EmptyState
-        icon="CreditCard"
-        title="Финансы пусты"
-        subtitle="Добавьте платежи и расходы по проекту"
-        action="Добавить платёж"
-      />
+      {/* Actions */}
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold text-stone text-sm">Платежи</h3>
+        {isDesigner && (
+          <button
+            onClick={() => setShowForm(v => !v)}
+            className="flex items-center gap-1.5 text-sm px-3.5 py-2 rounded-xl border border-border text-stone hover:border-terra/40 transition-all"
+          >
+            <Icon name="Plus" size={14} /> Добавить
+          </button>
+        )}
+      </div>
+
+      {/* Inline add form */}
+      {showForm && (
+        <div className="bg-white rounded-2xl border border-border p-5 space-y-3">
+          <h4 className="font-semibold text-stone text-sm">Новый платёж</h4>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-stone-light mb-1 block">Описание *</label>
+              <input
+                value={form.description}
+                onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                placeholder="Аванс за проект"
+                className="w-full px-3 py-2 rounded-xl border border-border bg-background text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20 focus:border-terra"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-stone-light mb-1 block">Сумма *</label>
+              <input
+                type="number"
+                value={form.amount}
+                onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
+                placeholder="150000"
+                className="w-full px-3 py-2 rounded-xl border border-border bg-background text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20 focus:border-terra"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-stone-light mb-1 block">Тип</label>
+              <select
+                value={form.type}
+                onChange={e => setForm(f => ({ ...f, type: e.target.value as "income" | "expense" }))}
+                className="w-full px-3 py-2 rounded-xl border border-border bg-background text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20 focus:border-terra"
+              >
+                <option value="income">Доход</option>
+                <option value="expense">Расход</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-stone-light mb-1 block">Статус</label>
+              <select
+                value={form.status}
+                onChange={e => setForm(f => ({ ...f, status: e.target.value as "pending" | "paid" | "overdue" }))}
+                className="w-full px-3 py-2 rounded-xl border border-border bg-background text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20 focus:border-terra"
+              >
+                <option value="pending">Ожидает</option>
+                <option value="paid">Оплачено</option>
+                <option value="overdue">Просрочено</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-stone-light mb-1 block">Дата оплаты</label>
+              <input
+                type="date"
+                value={form.due_date}
+                onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))}
+                className="w-full px-3 py-2 rounded-xl border border-border bg-background text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20 focus:border-terra"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-stone-light mb-1 block">Категория</label>
+              <input
+                value={form.category}
+                onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
+                placeholder="Проектирование"
+                className="w-full px-3 py-2 rounded-xl border border-border bg-background text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20 focus:border-terra"
+              />
+            </div>
+          </div>
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={handleAdd}
+              disabled={addMutation.isPending}
+              className="terra-gradient text-white font-medium px-5 py-2 rounded-xl hover:opacity-90 transition-all text-sm disabled:opacity-60"
+            >
+              {addMutation.isPending ? "Сохранение..." : "Добавить платёж"}
+            </button>
+            <button
+              onClick={() => setShowForm(false)}
+              className="px-5 py-2 rounded-xl border border-border text-stone-mid text-sm hover:bg-muted transition-colors"
+            >
+              Отмена
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Payment list */}
+      {payments.length === 0 ? (
+        <EmptyState
+          icon="TrendingUp"
+          title="Платежей пока нет"
+          subtitle="Добавьте доходы и расходы проекта"
+          action={isDesigner ? "Добавить платёж" : undefined}
+          onAction={() => setShowForm(true)}
+        />
+      ) : (
+        <div className="bg-white rounded-2xl border border-border overflow-hidden divide-y divide-border">
+          {payments.map(payment => {
+            const statusInfo = PAYMENT_STATUS_MAP[payment.status] || PAYMENT_STATUS_MAP.pending;
+            return (
+              <div key={payment.id} className="flex items-center gap-3 px-5 py-3.5 group">
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                  payment.type === "income" ? "bg-green-50" : "bg-red-50"
+                }`}>
+                  <Icon
+                    name={payment.type === "income" ? "ArrowDownLeft" : "ArrowUpRight"}
+                    size={15}
+                    className={payment.type === "income" ? "text-green-600" : "text-red-500"}
+                  />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-stone font-medium truncate">{payment.description}</p>
+                  <p className="text-xs text-stone-light">
+                    {payment.category && <span>{payment.category}</span>}
+                    {payment.category && payment.due_date && <span> &middot; </span>}
+                    {payment.due_date && <span>{formatDate(payment.due_date)}</span>}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => handleToggleStatus(payment)}
+                    disabled={!isDesigner || updateMutation.isPending}
+                    className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-all ${statusInfo.color} ${
+                      isDesigner ? "cursor-pointer hover:opacity-80" : "cursor-default"
+                    }`}
+                  >
+                    {statusInfo.label}
+                  </button>
+                  <span className={`text-sm font-semibold whitespace-nowrap ${
+                    payment.type === "income" ? "text-stone" : "text-red-500"
+                  }`}>
+                    {payment.type === "expense" ? "-" : ""}{fmtMoney(payment.amount)}
+                  </span>
+                  {isDesigner && (
+                    <button
+                      onClick={() => handleDelete(payment.id)}
+                      disabled={deleteMutation.isPending}
+                      className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg hover:bg-red-50 text-stone-light hover:text-red-500 transition-all"
+                    >
+                      <Icon name="Trash2" size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
 
-export function DocsTab() {
-  const [filter, setFilter] = useState<"all" | "generated" | "uploaded">("all");
+/* ─── DocsTab ─── */
+
+type DocFilter = "all" | "uploaded" | "generated";
+
+export function DocsTab({ projectId }: { projectId: string }) {
+  const { user } = useAuth();
+  const isDesigner = user?.role === "designer";
+
+  const { data, isLoading } = useDocuments(projectId);
+  const uploadMutation = useUploadDocument();
+  const deleteMutation = useDeleteDocument();
+
+  const documents: Document[] = data?.documents || [];
+
+  const [filter, setFilter] = useState<DocFilter>("all");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const filtered = filter === "all" ? documents : documents.filter(d => d.type === filter);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = (reader.result as string).split(",")[1];
+      const ext = file.name.split(".").pop() || "pdf";
+      uploadMutation.mutate({
+        projectId,
+        data: {
+          title: file.name,
+          file: base64,
+          content_type: file.type,
+          ext,
+        },
+      });
+    };
+    reader.readAsDataURL(file);
+
+    // Reset input so the same file can be re-uploaded
+    e.target.value = "";
+  };
+
+  const handleDelete = (docId: string) => {
+    deleteMutation.mutate({ projectId, docId });
+  };
+
+  const getDownloadUrl = (doc: Document) => doc.signed_url || doc.generated_url || "";
+
+  const formatDate = (d?: string) => {
+    if (!d) return "";
+    return new Date(d).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" });
+  };
+
+  const filterTabs: { id: DocFilter; label: string }[] = [
+    { id: "all", label: "Все" },
+    { id: "uploaded", label: "Загруженные" },
+    { id: "generated", label: "Сгенерированные" },
+  ];
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Icon name="Loader2" size={22} className="text-terra animate-spin" />
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <div className="flex gap-1 bg-muted rounded-xl p-1">
-          {(["all", "generated", "uploaded"] as const).map(f => (
+          {filterTabs.map(tab => (
             <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${filter === f ? "bg-white text-stone shadow-sm" : "text-stone-mid hover:text-stone"}`}
+              key={tab.id}
+              onClick={() => setFilter(tab.id)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                filter === tab.id
+                  ? "bg-white text-stone shadow-sm"
+                  : "text-stone-mid hover:text-stone"
+              }`}
             >
-              {f === "all" ? "Все" : f === "generated" ? "Сформированные" : "Загруженные"}
+              {tab.label}
             </button>
           ))}
         </div>
-        <button className="flex items-center gap-1.5 text-sm px-3.5 py-2 rounded-xl terra-gradient text-white hover:opacity-90 transition-all">
-          <Icon name="Upload" size={14} className="text-white" /> Загрузить документ
-        </button>
+        {isDesigner && (
+          <>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadMutation.isPending}
+              className="flex items-center gap-1.5 text-sm px-3.5 py-2 rounded-xl border border-border text-stone hover:border-terra/40 transition-all disabled:opacity-60"
+            >
+              <Icon name="Upload" size={14} />
+              {uploadMutation.isPending ? "Загрузка..." : "Загрузить"}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              onChange={handleFileChange}
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.svg"
+            />
+          </>
+        )}
       </div>
 
-      <EmptyState
-        icon="FileText"
-        title="Нет документов"
-        subtitle="Документы будут появляться по мере работы над проектом"
-        action="Загрузить документ"
-      />
+      {/* Document list */}
+      {filtered.length === 0 ? (
+        <EmptyState
+          icon="FolderOpen"
+          title="Документов пока нет"
+          subtitle="Загрузите файлы проекта"
+          action={isDesigner ? "Загрузить документ" : undefined}
+          onAction={() => fileInputRef.current?.click()}
+        />
+      ) : (
+        <div className="bg-white rounded-2xl border border-border overflow-hidden divide-y divide-border">
+          {filtered.map(doc => {
+            const url = getDownloadUrl(doc);
+            const ext = doc.title?.split(".").pop()?.toUpperCase() || "FILE";
+            return (
+              <div key={doc.id} className="flex items-center gap-3 px-5 py-3.5 group">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                  doc.type === "generated" ? "bg-blue-50" : "bg-muted"
+                }`}>
+                  <Icon
+                    name={doc.type === "generated" ? "FileText" : "File"}
+                    size={18}
+                    className={doc.type === "generated" ? "text-blue-600" : "text-stone-light"}
+                  />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-stone font-medium truncate">{doc.title}</p>
+                  <div className="flex items-center gap-2 text-xs text-stone-light">
+                    <span className="uppercase">{ext}</span>
+                    {doc.created_at && (
+                      <>
+                        <span>&middot;</span>
+                        <span>{formatDate(doc.created_at)}</span>
+                      </>
+                    )}
+                    {doc.type === "generated" && (
+                      <>
+                        <span>&middot;</span>
+                        <span className="text-blue-600">Сгенерирован</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {url && (
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-1.5 rounded-lg hover:bg-muted text-stone-light hover:text-terra transition-all"
+                    >
+                      <Icon name="Download" size={16} />
+                    </a>
+                  )}
+                  {isDesigner && (
+                    <button
+                      onClick={() => handleDelete(doc.id)}
+                      disabled={deleteMutation.isPending}
+                      className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg hover:bg-red-50 text-stone-light hover:text-red-500 transition-all"
+                    >
+                      <Icon name="Trash2" size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,0 +1,5 @@
+{"tests": [
+  {"name": "Estimate requires auth", "method": "GET", "path": "/?project_id=test&section=estimate", "expectedStatus": 401},
+  {"name": "Payments requires auth", "method": "GET", "path": "/?project_id=test&section=payments", "expectedStatus": 401},
+  {"name": "Documents requires auth", "method": "GET", "path": "/?project_id=test&section=documents", "expectedStatus": 401}
+]}

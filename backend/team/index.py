@@ -30,7 +30,7 @@ def authenticate(headers):
     token = token.replace("Bearer ", "").strip()
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
-        return payload.get("id") or payload.get("sub") or payload.get("user_id")
+        return payload.get("userId") or payload.get("id") or payload.get("sub")
     except Exception:
         return None
 

@@ -6,6 +6,7 @@ const API_URLS = {
   messages: "https://functions.poehali.dev/1bb1fc89-5192-4068-8f31-750a8936c19c",
   team: "https://functions.poehali.dev/a4261477-82d9-4aee-90c1-67a418897761",
   proposals: "https://functions.poehali.dev/db119ef3-ac19-49e0-bd31-0b0ddec2a678",
+  projectData: "https://functions.poehali.dev/2a4b2276-c10d-4342-a98a-ceb61ec5abe8",
 };
 
 function getToken(): string | null {
@@ -304,6 +305,48 @@ export async function saveProposalTemplate(data: { name: string; items: { title:
 
 export async function deleteProposalTemplate(id: string) {
   const res = await fetch(`${API_URLS.proposals}?id=${id}&action=delete_template`, { method: "DELETE", headers: authHeaders() });
+  return handleResponse(res);
+}
+
+// Project Data (Estimate, Payments, Documents)
+export async function getEstimate(projectId: string) {
+  const res = await fetch(`${API_URLS.projectData}?project_id=${projectId}&section=estimate`, { method: "GET", headers: authHeaders() });
+  return handleResponse(res);
+}
+export async function addEstimateItem(projectId: string, data: Record<string, unknown>) {
+  const res = await fetch(`${API_URLS.projectData}?project_id=${projectId}&section=estimate`, { method: "POST", headers: authHeaders(), body: JSON.stringify(data) });
+  return handleResponse(res);
+}
+export async function deleteEstimateItem(projectId: string, itemId: string) {
+  const res = await fetch(`${API_URLS.projectData}?project_id=${projectId}&section=estimate&id=${itemId}`, { method: "DELETE", headers: authHeaders() });
+  return handleResponse(res);
+}
+export async function getPayments(projectId: string) {
+  const res = await fetch(`${API_URLS.projectData}?project_id=${projectId}&section=payments`, { method: "GET", headers: authHeaders() });
+  return handleResponse(res);
+}
+export async function addPayment(projectId: string, data: Record<string, unknown>) {
+  const res = await fetch(`${API_URLS.projectData}?project_id=${projectId}&section=payments`, { method: "POST", headers: authHeaders(), body: JSON.stringify(data) });
+  return handleResponse(res);
+}
+export async function updatePayment(projectId: string, paymentId: string, data: Record<string, unknown>) {
+  const res = await fetch(`${API_URLS.projectData}?project_id=${projectId}&section=payments&id=${paymentId}`, { method: "PUT", headers: authHeaders(), body: JSON.stringify(data) });
+  return handleResponse(res);
+}
+export async function deletePayment(projectId: string, paymentId: string) {
+  const res = await fetch(`${API_URLS.projectData}?project_id=${projectId}&section=payments&id=${paymentId}`, { method: "DELETE", headers: authHeaders() });
+  return handleResponse(res);
+}
+export async function getDocuments(projectId: string) {
+  const res = await fetch(`${API_URLS.projectData}?project_id=${projectId}&section=documents`, { method: "GET", headers: authHeaders() });
+  return handleResponse(res);
+}
+export async function uploadDocument(projectId: string, data: { title: string; file: string; content_type: string; ext: string }) {
+  const res = await fetch(`${API_URLS.projectData}?project_id=${projectId}&section=documents`, { method: "POST", headers: authHeaders(), body: JSON.stringify(data) });
+  return handleResponse(res);
+}
+export async function deleteDocument(projectId: string, docId: string) {
+  const res = await fetch(`${API_URLS.projectData}?project_id=${projectId}&section=documents&id=${docId}`, { method: "DELETE", headers: authHeaders() });
   return handleResponse(res);
 }
 

@@ -285,9 +285,9 @@ export default function ProjectDetail() {
                 {activeTab === "proposal" && <ProposalTab project={project} />}
                 {activeTab === "execution" && <ExecutionTab project={project} />}
                 {activeTab === "brief" && <BriefTab />}
-                {activeTab === "estimate" && <EstimateTab />}
-                {activeTab === "finance" && <FinanceTab />}
-                {activeTab === "documents" && <DocsTab />}
+                {activeTab === "estimate" && <EstimateTab projectId={project.id} />}
+                {activeTab === "finance" && <FinanceTab projectId={project.id} />}
+                {activeTab === "documents" && <DocsTab projectId={project.id} />}
               </div>
             </>
           )}

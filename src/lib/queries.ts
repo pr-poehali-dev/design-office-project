@@ -30,6 +30,16 @@ import {
   getDmMessages,
   sendDm,
   markMessagesRead,
+  getEstimate,
+  addEstimateItem,
+  deleteEstimateItem,
+  getPayments,
+  addPayment,
+  updatePayment,
+  deletePayment,
+  getDocuments,
+  uploadDocument,
+  deleteDocument,
 } from "./api";
 
 const STALE_5MIN = 5 * 60 * 1000;
@@ -416,5 +426,84 @@ export function useMarkRead() {
       qc.invalidateQueries({ queryKey: ["unread-count"] });
       qc.invalidateQueries({ queryKey: ["inbox"] });
     },
+  });
+}
+
+// Estimate
+export function useEstimate(projectId: string | undefined) {
+  return useQuery({
+    queryKey: ["estimate", projectId],
+    queryFn: () => getEstimate(projectId!),
+    enabled: !!projectId,
+    staleTime: STALE_5MIN,
+  });
+}
+export function useAddEstimateItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ projectId, data }: { projectId: string; data: Record<string, unknown> }) => addEstimateItem(projectId, data),
+    onSuccess: (_d, v) => { qc.invalidateQueries({ queryKey: ["estimate", v.projectId] }); },
+  });
+}
+export function useDeleteEstimateItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ projectId, itemId }: { projectId: string; itemId: string }) => deleteEstimateItem(projectId, itemId),
+    onSuccess: (_d, v) => { qc.invalidateQueries({ queryKey: ["estimate", v.projectId] }); },
+  });
+}
+
+// Payments
+export function usePayments(projectId: string | undefined) {
+  return useQuery({
+    queryKey: ["payments", projectId],
+    queryFn: () => getPayments(projectId!),
+    enabled: !!projectId,
+    staleTime: STALE_5MIN,
+  });
+}
+export function useAddPayment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ projectId, data }: { projectId: string; data: Record<string, unknown> }) => addPayment(projectId, data),
+    onSuccess: (_d, v) => { qc.invalidateQueries({ queryKey: ["payments", v.projectId] }); },
+  });
+}
+export function useUpdatePayment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ projectId, paymentId, data }: { projectId: string; paymentId: string; data: Record<string, unknown> }) => updatePayment(projectId, paymentId, data),
+    onSuccess: (_d, v) => { qc.invalidateQueries({ queryKey: ["payments", v.projectId] }); },
+  });
+}
+export function useDeletePayment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ projectId, paymentId }: { projectId: string; paymentId: string }) => deletePayment(projectId, paymentId),
+    onSuccess: (_d, v) => { qc.invalidateQueries({ queryKey: ["payments", v.projectId] }); },
+  });
+}
+
+// Documents
+export function useDocuments(projectId: string | undefined) {
+  return useQuery({
+    queryKey: ["documents", projectId],
+    queryFn: () => getDocuments(projectId!),
+    enabled: !!projectId,
+    staleTime: STALE_5MIN,
+  });
+}
+export function useUploadDocument() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ projectId, data }: { projectId: string; data: { title: string; file: string; content_type: string; ext: string } }) => uploadDocument(projectId, data),
+    onSuccess: (_d, v) => { qc.invalidateQueries({ queryKey: ["documents", v.projectId] }); },
+  });
+}
+export function useDeleteDocument() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ projectId, docId }: { projectId: string; docId: string }) => deleteDocument(projectId, docId),
+    onSuccess: (_d, v) => { qc.invalidateQueries({ queryKey: ["documents", v.projectId] }); },
   });
 }
