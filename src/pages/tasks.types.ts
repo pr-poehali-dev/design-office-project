@@ -4,8 +4,8 @@ export type TaskStatus = "todo" | "in_progress" | "review" | "done";
 export interface Task {
   id: string;
   title: string;
-  project_id: string;
-  project_title: string;
+  project_id: string | null;
+  project_title: string | null;
   priority: Priority;
   deadline: string | null;
   status: TaskStatus;
@@ -14,6 +14,7 @@ export interface Task {
   assigned_last_name: string | null;
   description: string | null;
   created_at: string;
+  created_by: string | null;
 }
 
 export const PRIORITY_CONFIG: Record<Priority, { label: string; color: string; dot: string }> = {

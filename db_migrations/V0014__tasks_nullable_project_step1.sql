@@ -1,0 +1,2 @@
+ALTER TABLE t_p54886222_design_office_projec.tasks ADD COLUMN project_id_new uuid NULL REFERENCES t_p54886222_design_office_projec.projects(id);
+UPDATE t_p54886222_design_office_projec.tasks SET project_id_new = project_id;

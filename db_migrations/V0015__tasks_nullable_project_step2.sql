@@ -1,0 +1,3 @@
+ALTER TABLE t_p54886222_design_office_projec.tasks DROP CONSTRAINT tasks_project_id_fkey;
+ALTER TABLE t_p54886222_design_office_projec.tasks RENAME COLUMN project_id TO project_id_old;
+ALTER TABLE t_p54886222_design_office_projec.tasks RENAME COLUMN project_id_new TO project_id;

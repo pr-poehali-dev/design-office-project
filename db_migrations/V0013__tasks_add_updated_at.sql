@@ -1,0 +1,1 @@
+ALTER TABLE t_p54886222_design_office_projec.tasks ADD COLUMN IF NOT EXISTS updated_at timestamp without time zone DEFAULT now();

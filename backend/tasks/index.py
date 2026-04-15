@@ -63,7 +63,7 @@ def parse_body(body):
 
 
 def authenticate(headers):
-    """Authenticate request and return user dict or error response dict."""
+    """Аутентификация запроса, возвращает dict пользователя или error response."""
     token = extract_token(headers)
     if not token:
         return error_response(
@@ -92,9 +92,7 @@ def authenticate(headers):
 
 
 def check_project_access(user, project_id):
-    """Check if user has access to a project.
-    Returns (project_row, None) on success or (None, error_response) on failure.
-    """
+    """Проверяет доступ пользователя к проекту."""
     conn = get_connection()
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
@@ -109,11 +107,9 @@ def check_project_access(user, project_id):
 
             project = dict(project)
 
-            # Designer-owner has access
             if str(project["designer_id"]) == str(user["id"]):
                 return project, None
 
-            # Project member with accepted invite has access
             cur.execute(
                 f"""SELECT id FROM {SCHEMA}.project_members
                     WHERE project_id = %s AND user_id = %s AND accepted = true""",
@@ -130,7 +126,9 @@ def check_project_access(user, project_id):
 
 
 def handle_list_tasks(qsp, user):
+    """Получение задач: по проекту, личные или все."""
     project_id = qsp.get("project_id")
+    personal_only = qsp.get("personal") == "true"
 
     conn = get_connection()
     try:
@@ -140,7 +138,10 @@ def handle_list_tasks(qsp, user):
                 if err:
                     return err
                 cur.execute(
-                    f"""SELECT t.*, u.first_name AS assigned_first_name,
+                    f"""SELECT t.id, t.project_id, t.stage_id, t.assigned_to,
+                               t.title, t.description, t.priority, t.status,
+                               t.deadline, t.created_at, t.created_by,
+                               u.first_name AS assigned_first_name,
                                u.last_name AS assigned_last_name,
                                p.title AS project_title
                         FROM {SCHEMA}.tasks t
@@ -150,21 +151,41 @@ def handle_list_tasks(qsp, user):
                         ORDER BY t.created_at DESC""",
                     (project_id,),
                 )
+            elif personal_only:
+                cur.execute(
+                    f"""SELECT t.id, t.project_id, t.stage_id, t.assigned_to,
+                               t.title, t.description, t.priority, t.status,
+                               t.deadline, t.created_at, t.created_by,
+                               u.first_name AS assigned_first_name,
+                               u.last_name AS assigned_last_name,
+                               NULL AS project_title
+                        FROM {SCHEMA}.tasks t
+                        LEFT JOIN {SCHEMA}.users u ON u.id = t.assigned_to
+                        WHERE t.project_id IS NULL AND t.created_by = %s
+                        ORDER BY t.created_at DESC""",
+                    (str(user["id"]),),
+                )
             else:
                 cur.execute(
-                    f"""SELECT t.*, u.first_name AS assigned_first_name,
+                    f"""SELECT t.id, t.project_id, t.stage_id, t.assigned_to,
+                               t.title, t.description, t.priority, t.status,
+                               t.deadline, t.created_at, t.created_by,
+                               u.first_name AS assigned_first_name,
                                u.last_name AS assigned_last_name,
                                p.title AS project_title
                         FROM {SCHEMA}.tasks t
                         LEFT JOIN {SCHEMA}.users u ON u.id = t.assigned_to
                         LEFT JOIN {SCHEMA}.projects p ON p.id = t.project_id
-                        WHERE t.project_id IN (
-                            SELECT id FROM {SCHEMA}.projects WHERE designer_id = %s
-                            UNION
-                            SELECT project_id FROM {SCHEMA}.project_members WHERE user_id = %s AND accepted = true
+                        WHERE (
+                            t.project_id IN (
+                                SELECT id FROM {SCHEMA}.projects WHERE designer_id = %s
+                                UNION
+                                SELECT project_id FROM {SCHEMA}.project_members WHERE user_id = %s AND accepted = true
+                            )
+                            OR (t.project_id IS NULL AND t.created_by = %s)
                         )
                         ORDER BY t.created_at DESC""",
-                    (str(user["id"]), str(user["id"])),
+                    (str(user["id"]), str(user["id"]), str(user["id"])),
                 )
             rows = cur.fetchall()
 
@@ -177,9 +198,7 @@ def handle_list_tasks(qsp, user):
 
 
 def handle_create_task(body_str, user):
-    if user["role"] != "designer":
-        return error_response("Only designers can create tasks", 403)
-
+    """Создание задачи — к проекту или личной."""
     try:
         body = parse_body(body_str)
     except (json.JSONDecodeError, TypeError):
@@ -188,43 +207,34 @@ def handle_create_task(body_str, user):
     if not body:
         return error_response("Invalid JSON body", 400)
 
-    project_id = body.get("project_id")
+    project_id = body.get("project_id") or None
     title = body.get("title")
 
-    if not project_id:
-        return error_response("project_id is required", 400)
     if not title:
         return error_response("title is required", 400)
 
-    # Verify user is the project's designer
     conn = get_connection()
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(
-                f"SELECT designer_id FROM {SCHEMA}.projects WHERE id = %s",
-                (project_id,),
-            )
-            project = cur.fetchone()
-
-            if not project:
-                return error_response("Project not found", 404)
-
-            if str(project["designer_id"]) != str(user["id"]):
-                return error_response(
-                    "Only the project designer can create tasks", 403
-                )
+            if project_id:
+                project, err = check_project_access(user, project_id)
+                if err:
+                    return err
 
             description = body.get("description") or None
             priority = body.get("priority") or None
             deadline = body.get("deadline") or None
             stage_id = body.get("stage_id") or None
             assigned_to = body.get("assigned_to") or None
-            status = "todo"
+            status = body.get("status") or "todo"
+
+            if not assigned_to:
+                assigned_to = str(user["id"])
 
             cur.execute(
                 f"""INSERT INTO {SCHEMA}.tasks
-                    (project_id, title, description, priority, status, deadline, stage_id, assigned_to)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    (project_id, title, description, priority, status, deadline, stage_id, assigned_to, created_by)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING *""",
                 (
                     project_id,
@@ -235,6 +245,7 @@ def handle_create_task(body_str, user):
                     deadline,
                     stage_id,
                     assigned_to,
+                    str(user["id"]),
                 ),
             )
             task = dict(cur.fetchone())
@@ -250,6 +261,7 @@ def handle_create_task(body_str, user):
 
 
 def handle_update_task(task_id, body_str, user):
+    """Обновление задачи — статус, поля и т.д."""
     if not task_id:
         return error_response("Task id query parameter is required", 400)
 
@@ -264,7 +276,6 @@ def handle_update_task(task_id, body_str, user):
     conn = get_connection()
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            # Fetch task to get project_id
             cur.execute(
                 f"SELECT * FROM {SCHEMA}.tasks WHERE id = %s",
                 (task_id,),
@@ -276,15 +287,17 @@ def handle_update_task(task_id, body_str, user):
 
             task = dict(task)
 
-            # Check project access
-            project, err = check_project_access(user, str(task["project_id"]))
-            if err:
-                return err
+            if task["project_id"]:
+                project, err = check_project_access(user, str(task["project_id"]))
+                if err:
+                    return err
+            else:
+                if str(task.get("created_by")) != str(user["id"]) and str(task.get("assigned_to")) != str(user["id"]):
+                    return error_response("Access denied", 403)
 
-            # Build dynamic update
             allowed_fields = [
                 "title", "description", "priority", "status",
-                "deadline", "stage_id", "assigned_to",
+                "deadline", "stage_id", "assigned_to", "project_id",
             ]
             set_clauses = []
             values = []
@@ -293,7 +306,6 @@ def handle_update_task(task_id, body_str, user):
                 if field in body:
                     value = body[field]
 
-                    # Validate status
                     if field == "status" and value not in VALID_STATUSES:
                         return error_response(
                             f"Invalid status. Must be one of: {', '.join(VALID_STATUSES)}",
@@ -329,13 +341,13 @@ def handle_update_task(task_id, body_str, user):
 
 
 def handle_delete_task(task_id, user):
+    """Удаление задачи."""
     if not task_id:
         return error_response("Task id query parameter is required", 400)
 
     conn = get_connection()
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            # Fetch task to get project_id
             cur.execute(
                 f"SELECT * FROM {SCHEMA}.tasks WHERE id = %s",
                 (task_id,),
@@ -347,20 +359,19 @@ def handle_delete_task(task_id, user):
 
             task = dict(task)
 
-            # Verify user is the project's designer
-            cur.execute(
-                f"SELECT designer_id FROM {SCHEMA}.projects WHERE id = %s",
-                (str(task["project_id"]),),
-            )
-            project = cur.fetchone()
-
-            if not project:
-                return error_response("Project not found", 404)
-
-            if str(project["designer_id"]) != str(user["id"]):
-                return error_response(
-                    "Only the project designer can delete tasks", 403
+            if task["project_id"]:
+                cur.execute(
+                    f"SELECT designer_id FROM {SCHEMA}.projects WHERE id = %s",
+                    (str(task["project_id"]),),
                 )
+                project = cur.fetchone()
+                if not project:
+                    return error_response("Project not found", 404)
+                if str(project["designer_id"]) != str(user["id"]):
+                    return error_response("Only the project designer can delete tasks", 403)
+            else:
+                if str(task.get("created_by")) != str(user["id"]):
+                    return error_response("Access denied", 403)
 
             cur.execute(
                 f"DELETE FROM {SCHEMA}.tasks WHERE id = %s RETURNING id",
@@ -378,41 +389,33 @@ def handle_delete_task(task_id, user):
 
 
 def handler(event, context=None):
+    """Обработчик задач: CRUD для задач проекта и личных задач."""
     method = event.get("httpMethod", event.get("method", "GET"))
     headers = event.get("headers", {})
     body = event.get("body", "")
     qsp = event.get("queryStringParameters") or {}
 
-    # Handle CORS preflight
     if method == "OPTIONS":
         return {"statusCode": 204, "headers": CORS_HEADERS, "body": ""}
 
-    # Authenticate all requests
     auth_result = authenticate(headers)
     if "statusCode" in auth_result:
         return auth_result
     user = auth_result
 
-    action = qsp.get("action", "")
-
     try:
         if method == "GET":
             return handle_list_tasks(qsp, user)
-
         elif method == "POST":
             return handle_create_task(body, user)
-
         elif method == "PUT":
             task_id = qsp.get("id")
             return handle_update_task(task_id, body, user)
-
         elif method == "DELETE":
             task_id = qsp.get("id")
             return handle_delete_task(task_id, user)
-
         else:
             return error_response("Method not allowed", 405)
-
     except Exception as e:
         print(f"Unhandled error: {e}")
         return error_response("Internal server error", 500)

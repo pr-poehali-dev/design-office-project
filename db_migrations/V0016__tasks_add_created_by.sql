@@ -1,0 +1,1 @@
+ALTER TABLE t_p54886222_design_office_projec.tasks ADD COLUMN created_by uuid NULL REFERENCES t_p54886222_design_office_projec.users(id);

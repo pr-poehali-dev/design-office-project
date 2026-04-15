@@ -156,7 +156,7 @@ export async function getAllTasks() {
 }
 
 export async function createTask(data: {
-  project_id: string;
+  project_id?: string | null;
   title: string;
   description?: string;
   priority?: string;
