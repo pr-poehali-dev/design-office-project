@@ -147,7 +147,11 @@ export default function ProfilePage() {
                       {expYears > 0 && <span className="text-xs px-2.5 py-0.5 rounded-full bg-terra-pale text-terra border border-terra/20 font-medium">Опыт {yearsLabel(expYears)}</span>}
                       <span className="flex items-center gap-1.5 text-xs text-green-600"><span className="w-2 h-2 bg-green-500 rounded-full" />Онлайн</span>
                     </div>
-                    {/* Accepting orders toggle */}
+                    <div className="flex items-center gap-2 mt-2">
+                      <span className="text-xs text-stone-light">ID:</span>
+                      <span className="font-mono text-xs font-bold text-stone tracking-wider">{user?.personal_id || "—"}</span>
+                      <button onClick={() => { navigator.clipboard.writeText(user?.personal_id || ""); }} className="p-1 hover:bg-muted rounded-lg transition-colors"><Icon name="Copy" size={11} className="text-stone-light" /></button>
+                    </div>
                     <div className="flex items-center gap-3 mt-3 pt-3 border-t border-border/50">
                       <Toggle checked={acceptingOrders} onChange={toggleAcceptingOrders} />
                       {acceptingOrders ? (
@@ -260,6 +264,12 @@ export default function ProfilePage() {
               </div>
             </div>
 
+            {/* Preview */}
+            <button onClick={() => setShowPreview(true)} className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-dashed border-border text-sm text-stone-mid hover:border-terra/40 hover:text-stone transition-colors"><Icon name="Eye" size={16} /> Как меня видят в Гильдии</button>
+          </div>
+
+          {/* Right column — Stats + Portfolio */}
+          <div className="space-y-4">
             {/* Stats */}
             <div className="grid grid-cols-3 gap-3">
               {[
@@ -275,27 +285,7 @@ export default function ProfilePage() {
               ))}
             </div>
 
-            {/* Personal ID */}
             <div className="bg-white rounded-2xl border border-border p-5">
-              <div className="bg-muted rounded-xl p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-stone-light mb-1">Ваш личный ID</p>
-                    <p className="font-mono text-xl font-bold text-stone tracking-wider">{user?.personal_id || "—"}</p>
-                  </div>
-                  <button onClick={() => { navigator.clipboard.writeText(user?.personal_id || ""); }} className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-xl border border-border text-stone-mid hover:bg-white transition-colors"><Icon name="Copy" size={13} /> Копировать</button>
-                </div>
-                <p className="text-xs text-stone-light mt-2">Поделитесь ID, чтобы вас могли найти и пригласить в проект или команду</p>
-              </div>
-            </div>
-
-            {/* Preview */}
-            <button onClick={() => setShowPreview(true)} className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-dashed border-border text-sm text-stone-mid hover:border-terra/40 hover:text-stone transition-colors"><Icon name="Eye" size={16} /> Как меня видят в Гильдии</button>
-          </div>
-
-          {/* Right column — Portfolio */}
-          <div className="space-y-4">
-            <div className="bg-white rounded-2xl border border-border p-5 md:sticky md:top-8">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold text-stone text-sm">Портфолио <span className="text-stone-light font-normal">({MOCK_PORTFOLIO.length} работ)</span></h3>
               </div>
