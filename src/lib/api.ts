@@ -5,6 +5,7 @@ const API_URLS = {
   tasks: "https://functions.poehali.dev/a3b72923-93e5-4052-8d6a-7c879d1621cc",
   messages: "https://functions.poehali.dev/1bb1fc89-5192-4068-8f31-750a8936c19c",
   team: "https://functions.poehali.dev/a4261477-82d9-4aee-90c1-67a418897761",
+  proposals: "https://functions.poehali.dev/db119ef3-ac19-49e0-bd31-0b0ddec2a678",
 };
 
 function getToken(): string | null {
@@ -237,6 +238,32 @@ export async function removeTeamMember(id: string) {
     method: "DELETE",
     headers: authHeaders(),
   });
+  return handleResponse(res);
+}
+
+// Proposals
+export async function getProposal(projectId: string) {
+  const res = await fetch(`${API_URLS.proposals}?project_id=${projectId}`, { method: "GET", headers: authHeaders() });
+  return handleResponse(res);
+}
+
+export async function createProposal(data: { project_id: string; items?: { title: string; description: string; price: number; order_number: number }[]; template_name?: string }) {
+  const res = await fetch(API_URLS.proposals, { method: "POST", headers: authHeaders(), body: JSON.stringify(data) });
+  return handleResponse(res);
+}
+
+export async function updateProposal(id: string, data: Record<string, unknown>) {
+  const res = await fetch(`${API_URLS.proposals}?id=${id}`, { method: "PUT", headers: authHeaders(), body: JSON.stringify(data) });
+  return handleResponse(res);
+}
+
+export async function uploadProposalBg(id: string, data: { image: string; content_type: string }) {
+  const res = await fetch(`${API_URLS.proposals}?id=${id}&action=upload_bg`, { method: "PUT", headers: authHeaders(), body: JSON.stringify(data) });
+  return handleResponse(res);
+}
+
+export async function deleteProposal(id: string) {
+  const res = await fetch(`${API_URLS.proposals}?id=${id}`, { method: "DELETE", headers: authHeaders() });
   return handleResponse(res);
 }
 

@@ -1,0 +1,1 @@
+{"tests": [{"name": "Get proposal", "method": "GET", "path": "/?project_id=test", "expectedStatus": 401}]}

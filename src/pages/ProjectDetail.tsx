@@ -6,6 +6,7 @@ import { useProject } from "@/lib/queries";
 import { TABS, fmtMoney } from "./projectDetail.types";
 import { OverviewTab, ExecutionTab } from "./ProjectOverviewTab";
 import { BriefTab, EstimateTab, FinanceTab, DocsTab } from "./ProjectDataTabs";
+import ProposalTab from "./ProposalTab";
 
 const NAV_ITEMS = [
   { icon: "LayoutDashboard", label: "Дашборд", id: "dashboard", path: "/dashboard" },
@@ -281,6 +282,7 @@ export default function ProjectDetail() {
               {/* Tab content */}
               <div className="animate-fade-in" key={activeTab}>
                 {activeTab === "overview" && <OverviewTab project={project} />}
+                {activeTab === "proposal" && <ProposalTab project={project} />}
                 {activeTab === "execution" && <ExecutionTab project={project} />}
                 {activeTab === "brief" && <BriefTab />}
                 {activeTab === "estimate" && <EstimateTab />}

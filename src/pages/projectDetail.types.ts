@@ -14,6 +14,7 @@ export const NAV_ITEMS = [
 
 export const TABS = [
   { id: "overview", label: "Обзор", icon: "LayoutDashboard" },
+  { id: "proposal", label: "КП", icon: "FileText" },
   { id: "execution", label: "Выполнение", icon: "ListChecks" },
   { id: "brief", label: "Бриф", icon: "ClipboardList" },
   { id: "estimate", label: "Смета", icon: "Receipt" },

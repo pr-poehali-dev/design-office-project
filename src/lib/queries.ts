@@ -18,6 +18,10 @@ import {
   inviteToTeam,
   updateTeamMember,
   removeTeamMember,
+  getProposal,
+  createProposal,
+  updateProposal,
+  uploadProposalBg,
 } from "./api";
 
 const STALE_5MIN = 5 * 60 * 1000;
@@ -260,6 +264,48 @@ export function useRemoveTeamMember() {
     mutationFn: removeTeamMember,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["team"] });
+    },
+  });
+}
+
+export function useProposal(projectId: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ["proposal", projectId],
+    queryFn: async () => {
+      const data = await getProposal(projectId!);
+      return data.proposal || null;
+    },
+    staleTime: STALE_5MIN,
+    enabled: !!projectId && enabled,
+  });
+}
+
+export function useCreateProposal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: createProposal,
+    onSuccess: (_res, vars) => {
+      qc.invalidateQueries({ queryKey: ["proposal", vars.project_id] });
+    },
+  });
+}
+
+export function useUpdateProposal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) => updateProposal(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["proposal"] });
+    },
+  });
+}
+
+export function useUploadProposalBg() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: { image: string; content_type: string } }) => uploadProposalBg(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["proposal"] });
     },
   });
 }
