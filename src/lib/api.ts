@@ -439,10 +439,11 @@ export async function archivePartner(id: string) {
 }
 
 // Clients
-export async function getClients(params?: { search?: string; archived?: string }) {
+export async function getClients(params?: { search?: string; archived?: string; status?: string }) {
   const url = new URL(API_URLS.clients);
   if (params?.search) url.searchParams.set("search", params.search);
   if (params?.archived) url.searchParams.set("archived", params.archived);
+  if (params?.status) url.searchParams.set("status", params.status);
   const res = await fetch(url.toString(), { method: "GET", headers: authHeaders() });
   return handleResponse(res);
 }
@@ -464,5 +465,15 @@ export async function updateClient(id: string, data: Record<string, unknown>) {
 
 export async function archiveClient(id: string) {
   const res = await fetch(`${API_URLS.clients}?id=${id}&action=archive`, { method: "PUT", headers: authHeaders() });
+  return handleResponse(res);
+}
+
+export async function getClientNotes(clientId: string) {
+  const res = await fetch(`${API_URLS.clients}?id=${clientId}&action=notes`, { method: "GET", headers: authHeaders() });
+  return handleResponse(res);
+}
+
+export async function createClientNote(clientId: string, content: string) {
+  const res = await fetch(`${API_URLS.clients}?id=${clientId}&action=notes`, { method: "POST", headers: authHeaders(), body: JSON.stringify({ content }) });
   return handleResponse(res);
 }

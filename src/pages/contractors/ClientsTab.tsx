@@ -1,17 +1,15 @@
 import { useState, useEffect, useCallback } from "react";
-import { getClients, createClient, updateClient, archiveClient } from "@/lib/api";
+import { getClients, createClient } from "@/lib/api";
 import { Client } from "./ClientTypes";
 import ClientList from "./ClientList";
-import ClientForm from "./ClientForm";
+import ClientDetail from "./ClientDetail";
 import { toast } from "sonner";
 
 export default function ClientsTab() {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
-  const [showForm, setShowForm] = useState(false);
-  const [editing, setEditing] = useState<Client | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const fetchClients = useCallback(async () => {
     setLoading(true);
@@ -31,75 +29,34 @@ export default function ClientsTab() {
     fetchClients();
   }, [fetchClients]);
 
-  const handleCreate = async (formData: Record<string, unknown>) => {
-    setSaving(true);
+  const handleQuickAdd = async (name: string) => {
     try {
-      await createClient(formData);
+      const data = await createClient({ name });
       toast.success("Клиент добавлен");
-      setShowForm(false);
+      setSelectedId(data.client.id);
       fetchClients();
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Ошибка создания");
-    } finally {
-      setSaving(false);
     }
   };
 
-  const handleUpdate = async (formData: Record<string, unknown>) => {
-    if (!editing) return;
-    setSaving(true);
-    try {
-      await updateClient(editing.id, formData);
-      toast.success("Клиент обновлён");
-      setEditing(null);
-      fetchClients();
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Ошибка сохранения");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleArchive = async () => {
-    if (!editing) return;
-    try {
-      const data = await archiveClient(editing.id);
-      toast.success(data.client.is_archived ? "Клиент архивирован" : "Клиент восстановлен");
-      setEditing(null);
-      fetchClients();
-    } catch {
-      toast.error("Ошибка");
-    }
-  };
+  if (selectedId) {
+    return (
+      <ClientDetail
+        clientId={selectedId}
+        onBack={() => { setSelectedId(null); fetchClients(); }}
+      />
+    );
+  }
 
   return (
-    <div>
-      <ClientList
-        clients={clients}
-        loading={loading}
-        onSelect={c => setEditing(c)}
-        onAdd={() => setShowForm(true)}
-        search={search}
-        onSearch={setSearch}
-      />
-
-      {showForm && (
-        <ClientForm
-          onSave={handleCreate}
-          onCancel={() => setShowForm(false)}
-          saving={saving}
-        />
-      )}
-
-      {editing && (
-        <ClientForm
-          client={editing}
-          onSave={handleUpdate}
-          onCancel={() => setEditing(null)}
-          onArchive={handleArchive}
-          saving={saving}
-        />
-      )}
-    </div>
+    <ClientList
+      clients={clients}
+      loading={loading}
+      onSelect={c => setSelectedId(c.id)}
+      onAdd={handleQuickAdd}
+      search={search}
+      onSearch={setSearch}
+    />
   );
 }

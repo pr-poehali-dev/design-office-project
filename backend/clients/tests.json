@@ -1,1 +1,1 @@
-{"tests": [{"name": "List clients without auth", "method": "GET", "path": "/", "expectedStatus": 401}, {"name": "OPTIONS preflight", "method": "OPTIONS", "path": "/", "expectedStatus": 204}]}
+{"tests": [{"name": "List clients without auth", "method": "GET", "path": "/", "expectedStatus": 401}, {"name": "OPTIONS preflight", "method": "OPTIONS", "path": "/", "expectedStatus": 204}, {"name": "Get notes without auth", "method": "GET", "path": "/?action=notes&id=test", "expectedStatus": 401}]}
