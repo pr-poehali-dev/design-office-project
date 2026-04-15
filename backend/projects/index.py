@@ -128,9 +128,11 @@ def handle_list_projects(user):
             if user["role"] == "designer":
                 cur.execute(
                     f"""SELECT p.*, u.first_name AS designer_first_name,
-                               u.last_name AS designer_last_name
+                               u.last_name AS designer_last_name,
+                               c.name AS client_name
                         FROM {SCHEMA}.projects p
                         JOIN {SCHEMA}.users u ON u.id = p.designer_id
+                        LEFT JOIN {SCHEMA}.clients c ON c.id = p.client_id
                         WHERE p.designer_id = %s
                         ORDER BY p.created_at DESC""",
                     (str(user["id"]),),
@@ -138,9 +140,11 @@ def handle_list_projects(user):
             else:
                 cur.execute(
                     f"""SELECT p.*, u.first_name AS designer_first_name,
-                               u.last_name AS designer_last_name
+                               u.last_name AS designer_last_name,
+                               c.name AS client_name
                         FROM {SCHEMA}.projects p
                         JOIN {SCHEMA}.users u ON u.id = p.designer_id
+                        LEFT JOIN {SCHEMA}.clients c ON c.id = p.client_id
                         JOIN {SCHEMA}.project_members pm ON pm.project_id = p.id
                         WHERE pm.user_id = %s AND pm.accepted = true
                         ORDER BY p.created_at DESC""",
@@ -180,17 +184,17 @@ def handle_create_project(body_str, user):
     budget = body.get("budget") or None
     start_date = body.get("start_date") or None
     deadline = body.get("deadline") or None
+    client_id = body.get("client_id") or None
 
     conn = get_connection()
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("BEGIN")
 
-            # Insert project
             cur.execute(
                 f"""INSERT INTO {SCHEMA}.projects
-                    (designer_id, title, description, address, area, rooms, style, budget, start_date, deadline)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    (designer_id, title, description, address, area, rooms, style, budget, start_date, deadline, client_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING *""",
                 (
                     str(user["id"]),
@@ -203,6 +207,7 @@ def handle_create_project(body_str, user):
                     budget,
                     start_date,
                     deadline,
+                    client_id,
                 ),
             )
             project = dict(cur.fetchone())
@@ -344,6 +349,7 @@ def handle_update_project(body_str, project_id, user):
                 "budget",
                 "start_date",
                 "deadline",
+                "client_id",
             ]
 
             set_clauses = []

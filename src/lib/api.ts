@@ -468,6 +468,11 @@ export async function archiveClient(id: string) {
   return handleResponse(res);
 }
 
+export async function getClientProjects(clientId: string) {
+  const res = await fetch(`${API_URLS.clients}?id=${clientId}&action=projects`, { method: "GET", headers: authHeaders() });
+  return handleResponse(res);
+}
+
 export async function getClientNotes(clientId: string) {
   const res = await fetch(`${API_URLS.clients}?id=${clientId}&action=notes`, { method: "GET", headers: authHeaders() });
   return handleResponse(res);

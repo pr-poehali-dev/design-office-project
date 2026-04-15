@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import Icon from "@/components/ui/icon";
 import { toast } from "sonner";
-import { getClient, updateClient, archiveClient, getClientNotes, createClientNote } from "@/lib/api";
+import { useNavigate } from "react-router-dom";
+import { getClient, updateClient, archiveClient, getClientNotes, createClientNote, getClientProjects } from "@/lib/api";
 import { Client, ClientNote, CLIENT_STATUSES, CLIENT_SOURCES, ENTITY_TYPES } from "./ClientTypes";
 
 interface ClientDetailProps {
@@ -99,7 +100,7 @@ export default function ClientDetail({ clientId, onBack }: ClientDetailProps) {
 
       {tab === "data" && <DataTab client={client} onSave={fetchClient} />}
       {tab === "notes" && <NotesTab clientId={clientId} />}
-      {tab === "projects" && <ProjectsTab />}
+      {tab === "projects" && <ProjectsTab clientId={clientId} />}
       {tab === "documents" && <DocumentsTab />}
       {tab === "chats" && <ChatsTab />}
     </div>
@@ -343,12 +344,84 @@ function NotesTab({ clientId }: { clientId: string }) {
   );
 }
 
-function ProjectsTab() {
+const STATUS_LABELS: Record<string, { label: string; cls: string }> = {
+  draft: { label: "Черновик", cls: "bg-stone-100 text-stone-500" },
+  active: { label: "В работе", cls: "bg-blue-50 text-blue-600" },
+  completed: { label: "Завершён", cls: "bg-green-50 text-green-600" },
+  paused: { label: "На паузе", cls: "bg-amber-50 text-amber-600" },
+};
+
+function ProjectsTab({ clientId }: { clientId: string }) {
+  const navigate = useNavigate();
+  const [projects, setProjects] = useState<{ id: string; title: string; status: string; address?: string; budget?: number; deadline?: string; created_at: string }[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await getClientProjects(clientId);
+        setProjects(data.projects || []);
+      } catch {
+        toast.error("Не удалось загрузить проекты");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [clientId]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-10">
+        <div className="w-6 h-6 border-2 border-terra/30 border-t-terra rounded-full animate-spin" />
+      </div>
+    );
+  }
+
   return (
-    <div className="bg-white rounded-2xl border border-border p-8 text-center">
-      <Icon name="FolderOpen" size={28} className="text-stone-light mx-auto mb-2" />
-      <p className="text-sm text-stone-mid mb-1">Проекты клиента</p>
-      <p className="text-xs text-stone-light">Привязка проектов к клиентам — в следующем обновлении</p>
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-sm text-stone-mid">{projects.length} {projects.length === 1 ? "проект" : projects.length < 5 ? "проекта" : "проектов"}</p>
+        <button onClick={() => navigate("/dashboard?tab=projects&newProject=true")} className="flex items-center gap-1.5 terra-gradient text-white px-4 py-2 rounded-xl text-sm font-medium hover:opacity-90">
+          <Icon name="Plus" size={14} /> Новый проект
+        </button>
+      </div>
+
+      {projects.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-border p-8 text-center">
+          <Icon name="FolderOpen" size={28} className="text-stone-light mx-auto mb-2" />
+          <p className="text-sm text-stone-mid">У этого клиента пока нет проектов</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {projects.map(p => {
+            const st = STATUS_LABELS[p.status] || { label: p.status, cls: "bg-muted text-stone-mid" };
+            return (
+              <div
+                key={p.id}
+                onClick={() => navigate(`/project/${p.id}`)}
+                className="bg-white rounded-2xl border border-border p-4 cursor-pointer hover:border-terra/30 hover:shadow-sm transition-all flex items-center gap-4"
+              >
+                <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center flex-shrink-0">
+                  <Icon name="FolderOpen" size={18} className="text-stone-light" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-semibold text-stone text-sm truncate">{p.title}</h4>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${st.cls}`}>{st.label}</span>
+                    {p.address && <span className="text-xs text-stone-light truncate">{p.address}</span>}
+                  </div>
+                </div>
+                {p.deadline && (
+                  <span className="text-xs text-stone-light flex-shrink-0">
+                    до {new Date(p.deadline).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}
+                  </span>
+                )}
+                <Icon name="ChevronRight" size={16} className="text-stone-light flex-shrink-0" />
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

@@ -119,7 +119,7 @@ def handle_list(qsp, user):
 
             cur.execute(
                 f"""SELECT c.*,
-                           (SELECT COUNT(*) FROM {SCHEMA}.projects p WHERE p.designer_id = c.owner_id) AS project_count
+                           (SELECT COUNT(*) FROM {SCHEMA}.projects p WHERE p.client_id = c.id) AS project_count
                     FROM {SCHEMA}.clients c
                     WHERE {where}
                     ORDER BY c.created_at DESC""",
@@ -269,6 +269,33 @@ def handle_archive(client_id, user):
         conn.close()
 
 
+# --- Projects ---
+
+def handle_list_client_projects(client_id, user):
+    """Список проектов привязанных к клиенту."""
+    conn = get_connection()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                f"SELECT id FROM {SCHEMA}.clients WHERE id = %s AND owner_id = %s",
+                (client_id, str(user["id"])),
+            )
+            if not cur.fetchone():
+                return error_response("Client not found", 404)
+
+            cur.execute(
+                f"""SELECT p.id, p.title, p.status, p.address, p.budget, p.deadline, p.created_at
+                    FROM {SCHEMA}.projects p
+                    WHERE p.client_id = %s
+                    ORDER BY p.created_at DESC""",
+                (client_id,),
+            )
+            rows = cur.fetchall()
+        return json_response({"projects": [dict(r) for r in rows]})
+    finally:
+        conn.close()
+
+
 # --- Notes ---
 
 def handle_list_notes(client_id, user):
@@ -353,6 +380,11 @@ def handler(event, context):
 
     client_id = qsp.get("id")
     action = qsp.get("action")
+
+    if action == "projects":
+        if method == "GET":
+            return handle_list_client_projects(client_id, user)
+        return error_response("Method not allowed", 405)
 
     if action == "notes":
         if method == "GET":
