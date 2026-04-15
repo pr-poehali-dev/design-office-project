@@ -8,6 +8,7 @@ const API_URLS = {
   proposals: "https://functions.poehali.dev/db119ef3-ac19-49e0-bd31-0b0ddec2a678",
   projectData: "https://functions.poehali.dev/2a4b2276-c10d-4342-a98a-ceb61ec5abe8",
   partners: "https://functions.poehali.dev/a0444403-5017-4179-b25f-fda06a4fa486",
+  clients: "https://functions.poehali.dev/d706be60-57ee-4740-9d01-03cb9d14415a",
 };
 
 function getToken(): string | null {
@@ -434,5 +435,34 @@ export async function updatePartner(id: string, data: Record<string, unknown>) {
 
 export async function archivePartner(id: string) {
   const res = await fetch(`${API_URLS.partners}?id=${id}&action=archive`, { method: "PUT", headers: authHeaders() });
+  return handleResponse(res);
+}
+
+// Clients
+export async function getClients(params?: { search?: string; archived?: string }) {
+  const url = new URL(API_URLS.clients);
+  if (params?.search) url.searchParams.set("search", params.search);
+  if (params?.archived) url.searchParams.set("archived", params.archived);
+  const res = await fetch(url.toString(), { method: "GET", headers: authHeaders() });
+  return handleResponse(res);
+}
+
+export async function getClient(id: string) {
+  const res = await fetch(`${API_URLS.clients}?id=${id}`, { method: "GET", headers: authHeaders() });
+  return handleResponse(res);
+}
+
+export async function createClient(data: Record<string, unknown>) {
+  const res = await fetch(API_URLS.clients, { method: "POST", headers: authHeaders(), body: JSON.stringify(data) });
+  return handleResponse(res);
+}
+
+export async function updateClient(id: string, data: Record<string, unknown>) {
+  const res = await fetch(`${API_URLS.clients}?id=${id}`, { method: "PUT", headers: authHeaders(), body: JSON.stringify(data) });
+  return handleResponse(res);
+}
+
+export async function archiveClient(id: string) {
+  const res = await fetch(`${API_URLS.clients}?id=${id}&action=archive`, { method: "PUT", headers: authHeaders() });
   return handleResponse(res);
 }

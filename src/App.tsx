@@ -13,8 +13,7 @@ import ProjectDetail from "./pages/ProjectDetail";
 import Guild from "./pages/Guild";
 import DesignerProfile from "./pages/DesignerProfile";
 import Tasks from "./pages/Tasks";
-import Team from "./pages/Team";
-import Partners from "./pages/Partners";
+import Contractors from "./pages/Contractors";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -44,8 +43,9 @@ const App = () => (
             <Route path="/guild" element={<Guild />} />
             <Route path="/guild/designer/:id" element={<DesignerProfile />} />
             <Route path="/tasks" element={<Tasks />} />
-            <Route path="/team" element={<Team />} />
-            <Route path="/partners" element={<Partners />} />
+            <Route path="/contractors" element={<Contractors />} />
+            <Route path="/team" element={<Contractors />} />
+            <Route path="/partners" element={<Contractors />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

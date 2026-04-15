@@ -12,9 +12,8 @@ const NAV_ITEMS = [
   { icon: "LayoutDashboard", label: "Дашборд", id: "dashboard", path: "" },
   { icon: "FolderOpen", label: "Проекты", id: "projects", path: "" },
   { icon: "CheckSquare", label: "Задачи", id: "tasks", path: "/tasks" },
-  { icon: "Handshake", label: "Партнёры", id: "partners", path: "/partners" },
+  { icon: "BookUser", label: "Контрагенты", id: "contractors", path: "/contractors" },
   { icon: "Users", label: "Гильдия", id: "guild", path: "/guild" },
-  { icon: "UsersRound", label: "Команда", id: "team", path: "/team" },
   { icon: "User", label: "П��офиль", id: "profile", path: "/dashboard?tab=profile" },
 ];
 
