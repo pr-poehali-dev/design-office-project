@@ -4,8 +4,9 @@ import Icon from "@/components/ui/icon";
 import { useAuth } from "@/lib/auth";
 import { useProjects, useUnreadCount } from "@/lib/queries";
 import DashboardSidebar from "./dashboard/DashboardSidebar";
-import { DashboardView, ProfileView, ProjectsView } from "./dashboard/DashboardContent";
+import { DashboardView, ProjectsView } from "./dashboard/DashboardContent";
 import CreateProjectModal from "./dashboard/CreateProjectModal";
+import ProfilePage from "./dashboard/ProfilePage";
 
 const NAV_ITEMS = [
   { icon: "LayoutDashboard", label: "Дашборд", id: "dashboard", path: "" },
@@ -112,7 +113,7 @@ export default function Dashboard() {
         )}
 
         {activeNav === "profile" && (
-          <ProfileView user={user} userInitials={userInitials} />
+          <ProfilePage />
         )}
 
         {activeNav === "projects" && (
