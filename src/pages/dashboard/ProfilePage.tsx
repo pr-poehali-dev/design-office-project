@@ -50,8 +50,10 @@ export default function ProfilePage() {
   const updateMutation = useUpdateProfile();
   const [activeTab, setActiveTab] = useState("card");
   const [showPreview, setShowPreview] = useState(false);
-  const [acceptingOrders, setAcceptingOrders] = useState(true);
-  const [contactsPublic, setContactsPublic] = useState(true);
+  const acceptingOrders = user?.accepting_orders !== false;
+  const contactsPublic = user?.contacts_public !== false;
+  const toggleAcceptingOrders = (v: boolean) => save({ accepting_orders: v });
+  const toggleContactsPublic = (v: boolean) => save({ contacts_public: v });
 
   const [editingAbout, setEditingAbout] = useState(false);
   const [editBio, setEditBio] = useState("");
@@ -147,7 +149,7 @@ export default function ProfilePage() {
                     </div>
                     {/* Accepting orders toggle */}
                     <div className="flex items-center gap-3 mt-3 pt-3 border-t border-border/50">
-                      <Toggle checked={acceptingOrders} onChange={setAcceptingOrders} />
+                      <Toggle checked={acceptingOrders} onChange={toggleAcceptingOrders} />
                       {acceptingOrders ? (
                         <span className="text-xs px-2.5 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 font-medium">Беру заказы</span>
                       ) : (
@@ -247,7 +249,7 @@ export default function ProfilePage() {
               {/* Privacy toggle */}
               <div className="mt-4 pt-4 border-t border-border/50">
                 <div className="flex items-center gap-3">
-                  <Toggle checked={contactsPublic} onChange={setContactsPublic} />
+                  <Toggle checked={contactsPublic} onChange={toggleContactsPublic} />
                   <span className="text-xs text-stone font-medium">Показывать контакты в Гильдии</span>
                 </div>
                 <p className="text-xs text-stone-light mt-1.5 ml-14">

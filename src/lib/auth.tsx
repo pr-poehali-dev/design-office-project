@@ -26,6 +26,8 @@ interface User {
   website?: string;
   work_styles?: string;
   work_objects?: string;
+  accepting_orders?: boolean;
+  contacts_public?: boolean;
   created_at?: string;
 }
 

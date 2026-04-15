@@ -365,7 +365,7 @@ def handle_update_profile(headers, body_str):
     allowed = [
         "first_name", "last_name", "phone", "city", "bio",
         "specialization", "experience_years", "telegram", "website",
-        "work_styles", "work_objects",
+        "work_styles", "work_objects", "accepting_orders", "contacts_public",
     ]
 
     conn = get_connection()
