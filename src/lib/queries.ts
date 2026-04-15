@@ -26,6 +26,8 @@ import {
   saveProposalTemplate,
   deleteProposalTemplate,
   updateProfile,
+  getCompanyData,
+  saveCompanyData,
   getInbox,
   getUnreadCount,
   getDmMessages,
@@ -432,6 +434,22 @@ export function useMarkRead() {
 
 export function useUpdateProfile() {
   return useMutation({ mutationFn: updateProfile });
+}
+
+export function useCompanyData() {
+  return useQuery({
+    queryKey: ["company-data"],
+    queryFn: getCompanyData,
+    staleTime: STALE_5MIN,
+  });
+}
+
+export function useSaveCompanyData() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: saveCompanyData,
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["company-data"] }); },
+  });
 }
 
 // Estimate

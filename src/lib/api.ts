@@ -308,6 +308,16 @@ export async function deleteProposalTemplate(id: string) {
   return handleResponse(res);
 }
 
+export async function getCompanyData() {
+  const res = await fetch(`${API_URLS.auth}?action=company`, { method: "GET", headers: authHeaders() });
+  return handleResponse(res);
+}
+
+export async function saveCompanyData(data: { entity_type: string; data: Record<string, unknown> }) {
+  const res = await fetch(`${API_URLS.auth}?action=company`, { method: "PUT", headers: authHeaders(), body: JSON.stringify(data) });
+  return handleResponse(res);
+}
+
 export async function updateProfile(data: Record<string, unknown>) {
   const res = await fetch(`${API_URLS.auth}?action=update_profile`, { method: "PUT", headers: authHeaders(), body: JSON.stringify(data) });
   return handleResponse(res);

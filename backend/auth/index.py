@@ -397,6 +397,75 @@ def handle_update_profile(headers, body_str):
         conn.close()
 
 
+def handle_get_company(headers):
+    """GET /company — получить данные компании."""
+    token = extract_token(headers)
+    if not token:
+        return error_response("Authorization required", 401)
+    payload = verify_token(token)
+    if not payload:
+        return error_response("Invalid or expired token", 401)
+    conn = get_connection()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                f"SELECT entity_type, data FROM {SCHEMA}.company_data WHERE user_id = %s",
+                (payload["userId"],),
+            )
+            row = cur.fetchone()
+        if not row:
+            return json_response({"entity_type": "individual", "data": {}})
+        return json_response({"entity_type": row["entity_type"], "data": row["data"]})
+    except Exception as e:
+        print(f"Get company error: {e}")
+        return error_response("Internal server error", 500)
+    finally:
+        conn.close()
+
+
+def handle_save_company(headers, body_str):
+    """PUT /company — сохранить данные компании."""
+    token = extract_token(headers)
+    if not token:
+        return error_response("Authorization required", 401)
+    payload = verify_token(token)
+    if not payload:
+        return error_response("Invalid or expired token", 401)
+    try:
+        body = parse_body(body_str)
+    except (json.JSONDecodeError, TypeError):
+        return error_response("Invalid JSON body", 400)
+    if not body:
+        return error_response("Invalid JSON body", 400)
+
+    entity_type = body.get("entity_type", "individual")
+    data = body.get("data", {})
+    uid = payload["userId"]
+
+    conn = get_connection()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(f"SELECT id FROM {SCHEMA}.company_data WHERE user_id = %s", (uid,))
+            if cur.fetchone():
+                cur.execute(
+                    f"UPDATE {SCHEMA}.company_data SET entity_type = %s, data = %s, updated_at = NOW() WHERE user_id = %s",
+                    (entity_type, json.dumps(data, default=str), uid),
+                )
+            else:
+                cur.execute(
+                    f"INSERT INTO {SCHEMA}.company_data (user_id, entity_type, data) VALUES (%s, %s, %s)",
+                    (uid, entity_type, json.dumps(data, default=str)),
+                )
+            conn.commit()
+        return json_response({"ok": True})
+    except Exception as e:
+        conn.rollback()
+        print(f"Save company error: {e}")
+        return error_response("Internal server error", 500)
+    finally:
+        conn.close()
+
+
 def handler(event, context=None):
     method = event.get("httpMethod", event.get("method", "GET"))
     path = event.get("path", "/")
@@ -433,6 +502,13 @@ def handler(event, context=None):
             if method != "PUT":
                 return error_response("Method not allowed", 400)
             return handle_update_profile(headers, body)
+
+        elif route == "company":
+            if method == "GET":
+                return handle_get_company(headers)
+            if method == "PUT":
+                return handle_save_company(headers, body)
+            return error_response("Method not allowed", 400)
 
         else:
             return error_response("Not found", 404)
