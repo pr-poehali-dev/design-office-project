@@ -69,7 +69,7 @@ def handle_get(user_id, qsp):
                         SELECT COUNT(*)
                         FROM {SCHEMA}.project_members pm
                         JOIN {SCHEMA}.projects p ON p.id = pm.project_id
-                        WHERE pm.member_id = tm.member_id
+                        WHERE pm.user_id = tm.member_id
                           AND pm.accepted = true
                           AND p.designer_id = tm.owner_id
                     ) AS projects_count,
@@ -77,7 +77,7 @@ def handle_get(user_id, qsp):
                         SELECT COUNT(*)
                         FROM {SCHEMA}.project_members pm
                         JOIN {SCHEMA}.projects p ON p.id = pm.project_id
-                        WHERE pm.member_id = tm.member_id
+                        WHERE pm.user_id = tm.member_id
                           AND pm.accepted = true
                           AND p.designer_id = tm.owner_id
                           AND p.status NOT IN ('completed', 'cancelled', 'archived')
@@ -98,7 +98,7 @@ def handle_get(user_id, qsp):
                     SELECT p.id, p.title
                     FROM {SCHEMA}.project_members pm
                     JOIN {SCHEMA}.projects p ON p.id = pm.project_id
-                    WHERE pm.member_id = %s
+                    WHERE pm.user_id = %s
                       AND pm.accepted = true
                       AND p.designer_id = %s
                     """,
