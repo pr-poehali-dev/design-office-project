@@ -21,6 +21,12 @@ interface User {
   rating: number;
   projects_count: number;
   personal_id?: string;
+  experience_years?: number;
+  telegram?: string;
+  website?: string;
+  work_styles?: string;
+  work_objects?: string;
+  created_at?: string;
 }
 
 interface AuthContextType {

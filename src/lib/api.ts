@@ -308,6 +308,11 @@ export async function deleteProposalTemplate(id: string) {
   return handleResponse(res);
 }
 
+export async function updateProfile(data: Record<string, unknown>) {
+  const res = await fetch(`${API_URLS.auth}?action=update_profile`, { method: "PUT", headers: authHeaders(), body: JSON.stringify(data) });
+  return handleResponse(res);
+}
+
 // Project Data (Estimate, Payments, Documents)
 export async function getEstimate(projectId: string) {
   const res = await fetch(`${API_URLS.projectData}?project_id=${projectId}&section=estimate`, { method: "GET", headers: authHeaders() });

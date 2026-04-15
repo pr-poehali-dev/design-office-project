@@ -25,6 +25,7 @@ import {
   getProposalTemplates,
   saveProposalTemplate,
   deleteProposalTemplate,
+  updateProfile,
   getInbox,
   getUnreadCount,
   getDmMessages,
@@ -427,6 +428,10 @@ export function useMarkRead() {
       qc.invalidateQueries({ queryKey: ["inbox"] });
     },
   });
+}
+
+export function useUpdateProfile() {
+  return useMutation({ mutationFn: updateProfile });
 }
 
 // Estimate

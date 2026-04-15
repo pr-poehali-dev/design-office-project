@@ -346,19 +346,65 @@ def handle_invite(headers, body_str):
         conn.close()
 
 
+def handle_update_profile(headers, body_str):
+    """PUT /update_profile — обновление профиля пользователя."""
+    token = extract_token(headers)
+    if not token:
+        return error_response("Authorization required", 401)
+    payload = verify_token(token)
+    if not payload:
+        return error_response("Invalid or expired token", 401)
+
+    try:
+        body = parse_body(body_str)
+    except (json.JSONDecodeError, TypeError):
+        return error_response("Invalid JSON body", 400)
+    if not body:
+        return error_response("Invalid JSON body", 400)
+
+    allowed = [
+        "first_name", "last_name", "phone", "city", "bio",
+        "specialization", "experience_years", "telegram", "website",
+        "work_styles", "work_objects",
+    ]
+
+    conn = get_connection()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            parts, vals = [], []
+            for f in allowed:
+                if f in body:
+                    parts.append(f"{f} = %s")
+                    vals.append(body[f])
+            if not parts:
+                return error_response("No fields to update", 400)
+            vals.append(payload["userId"])
+            cur.execute(
+                f"UPDATE {SCHEMA}.users SET {', '.join(parts)} WHERE id = %s RETURNING *",
+                vals,
+            )
+            user = cur.fetchone()
+            conn.commit()
+        if not user:
+            return error_response("User not found", 404)
+        safe_user = strip_password(dict(user))
+        return json_response({"user": safe_user})
+    except Exception as e:
+        conn.rollback()
+        print(f"Update profile error: {e}")
+        return error_response("Internal server error", 500)
+    finally:
+        conn.close()
+
+
 def handler(event, context=None):
     method = event.get("httpMethod", event.get("method", "GET"))
     path = event.get("path", "/")
     headers = event.get("headers", {})
     body = event.get("body", "")
 
-    # Handle CORS preflight
     if method == "OPTIONS":
-        return {
-            "statusCode": 204,
-            "headers": CORS_HEADERS,
-            "body": "",
-        }
+        return {"statusCode": 204, "headers": CORS_HEADERS, "body": ""}
 
     route = get_route(event)
 
@@ -383,10 +429,13 @@ def handler(event, context=None):
                 return error_response("Method not allowed", 400)
             return handle_invite(headers, body)
 
+        elif route == "update_profile":
+            if method != "PUT":
+                return error_response("Method not allowed", 400)
+            return handle_update_profile(headers, body)
+
         else:
-            return error_response(
-                "Not found. Available routes: /register, /login, /me, /invite", 404
-            )
+            return error_response("Not found", 404)
 
     except Exception as e:
         print(f"Unhandled error: {e}")
