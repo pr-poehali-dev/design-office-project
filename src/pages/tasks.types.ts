@@ -40,6 +40,12 @@ export const NAV_ITEMS = [
   { icon: "User", label: "Профиль", id: "profile", path: "/dashboard" },
 ];
 
+export interface TeamMember {
+  id: string;
+  first_name: string;
+  last_name: string;
+}
+
 export function formatDeadline(d: string | null): string {
   if (!d) return "—";
   return new Date(d).toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
