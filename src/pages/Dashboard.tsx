@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import Icon from "@/components/ui/icon";
 import { useAuth } from "@/lib/auth";
 import { useProjects, useUnreadCount } from "@/lib/queries";
@@ -15,14 +15,20 @@ const NAV_ITEMS = [
   { icon: "Users", label: "Клиенты", id: "clients", path: "" },
   { icon: "Handshake", label: "Гильдия", id: "guild", path: "/guild" },
   { icon: "UsersRound", label: "Команда", id: "team", path: "/team" },
-  { icon: "User", label: "Профиль", id: "profile", path: "" },
+  { icon: "User", label: "Профиль", id: "profile", path: "/dashboard?tab=profile" },
 ];
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user, logout, loading: authLoading } = useAuth();
-  const [activeNav, setActiveNav] = useState("dashboard");
+  const [activeNav, setActiveNav] = useState(searchParams.get("tab") || "dashboard");
   const [showCreateModal, setShowCreateModal] = useState(false);
+
+  const changeNav = (id: string) => {
+    setActiveNav(id);
+    if (id === "dashboard") { setSearchParams({}); } else { setSearchParams({ tab: id }); }
+  };
 
   const { data: projects = [], isLoading: loadingProjects } = useProjects(!!user);
   const { data: unreadData } = useUnreadCount();
@@ -65,7 +71,13 @@ export default function Dashboard() {
         userName={userName}
         userRole={userRole}
         unreadCount={unreadData?.total_unread || 0}
-        onNavClick={(item) => item.path ? navigate(item.path) : setActiveNav(item.id)}
+        onNavClick={(item) => {
+          if (item.path && !item.path.startsWith("/dashboard")) {
+            navigate(item.path);
+          } else {
+            changeNav(item.id);
+          }
+        }}
         onLogoClick={() => navigate("/")}
         onLogout={handleLogout}
       />
@@ -108,7 +120,7 @@ export default function Dashboard() {
             isDesigner={!!isDesigner}
             onCreateProject={() => setShowCreateModal(true)}
             onOpenProject={(id) => navigate(`/project/${id}`)}
-            onGoToProjects={() => setActiveNav("projects")}
+            onGoToProjects={() => changeNav("projects")}
           />
         )}
 

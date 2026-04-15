@@ -11,7 +11,7 @@ const NAV_ITEMS = [
   { icon: "UsersRound", label: "Команда", id: "team", path: "/team" },
   { icon: "Users", label: "Клиенты", id: "clients", path: "/dashboard" },
   { icon: "Handshake", label: "Гильдия", id: "guild", path: "/guild" },
-  { icon: "User", label: "Профиль", id: "profile", path: "/dashboard" },
+  { icon: "User", label: "Профиль", id: "profile", path: "/dashboard?tab=profile" },
 ];
 
 const TEAM_ROLES: Record<string, string> = {

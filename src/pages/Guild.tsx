@@ -32,7 +32,7 @@ const NAV_ITEMS = [
   { icon: "Users", label: "Клиенты", id: "clients", path: "/dashboard" },
   { icon: "Handshake", label: "Гильдия", id: "guild", path: "/guild" },
   { icon: "UsersRound", label: "Команда", id: "team", path: "/team" },
-  { icon: "User", label: "Профиль", id: "profile", path: "/dashboard" },
+  { icon: "User", label: "Профиль", id: "profile", path: "/dashboard?tab=profile" },
 ];
 
 const SPEC_LABELS: Record<string, string> = {
