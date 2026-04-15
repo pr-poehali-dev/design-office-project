@@ -3,7 +3,7 @@ import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import Icon from "@/components/ui/icon";
 import { useAuth } from "@/lib/auth";
-import { useProposal, useCreateProposal, useUpdateProposal, useUploadProposalBg } from "@/lib/queries";
+import { useProposal, useCreateProposal, useUpdateProposal, useUploadProposalBg, useProposalTemplates, useSaveProposalTemplate, useDeleteProposalTemplate } from "@/lib/queries";
 import { fmtMoney } from "./projectDetail.types";
 import type { ProjectData } from "./ProjectDetail";
 
@@ -21,6 +21,15 @@ interface Proposal {
   background_url: string | null;
   background_preset: string | null;
   template_name: string | null;
+  discount: number;
+  discount_type: string;
+  items: ProposalItem[];
+  created_at?: string;
+}
+
+interface Template {
+  id: string;
+  name: string;
   items: ProposalItem[];
 }
 
@@ -46,13 +55,21 @@ function formatDate(d?: string) {
 export default function ProposalTab({ project }: { project: ProjectData }) {
   const { user } = useAuth();
   const { data: proposal, isLoading } = useProposal(project.id);
+  const { data: templates = [] } = useProposalTemplates();
   const createMutation = useCreateProposal();
   const updateMutation = useUpdateProposal();
   const uploadBgMutation = useUploadProposalBg();
+  const saveTemplateMutation = useSaveProposalTemplate();
+  const deleteTemplateMutation = useDeleteProposalTemplate();
 
   const [editingItems, setEditingItems] = useState<ProposalItem[] | null>(null);
   const [editIdx, setEditIdx] = useState<number | null>(null);
   const [showBgPicker, setShowBgPicker] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [saveTemplateName, setSaveTemplateName] = useState("");
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [editDiscount, setEditDiscount] = useState<number | null>(null);
+  const [editDiscountType, setEditDiscountType] = useState<string>("fixed");
   const [saving, setSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const docRef = useRef<HTMLDivElement>(null);
@@ -62,19 +79,31 @@ export default function ProposalTab({ project }: { project: ProjectData }) {
   const isDesigner = user?.role === "designer";
   const prop = proposal as Proposal | null;
   const items = editingItems || prop?.items || [];
-  const total = items.reduce((s, i) => s + Number(i.price || 0), 0);
+  const subtotal = items.reduce((s, i) => s + Number(i.price || 0), 0);
+
+  const discount = editDiscount !== null ? editDiscount : Number(prop?.discount || 0);
+  const discountType = editDiscount !== null ? editDiscountType : (prop?.discount_type || "fixed");
+  const discountAmount = discountType === "percent" ? Math.round(subtotal * discount / 100) : discount;
+  const total = Math.max(0, subtotal - discountAmount);
   const pricePerSqm = project.area ? Math.round(total / project.area) : 0;
+
   const bgUrl = prop?.background_url || (prop?.background_preset ? PRESET_BACKGROUNDS.find(p => p.id === prop.background_preset)?.url : null);
   const statusInfo = STATUS_MAP[prop?.status || "draft"] || STATUS_MAP.draft;
 
-  const handleCreate = async () => {
+  const handleCreate = async (templateItems?: ProposalItem[]) => {
     try {
-      await createMutation.mutateAsync({ project_id: project.id });
+      await createMutation.mutateAsync({
+        project_id: project.id,
+        items: templateItems ? templateItems.map((item, idx) => ({ title: item.title, description: item.description || "", price: Number(item.price), order_number: idx })) : undefined,
+      });
     } catch { /* empty */ }
+    setShowTemplates(false);
   };
 
   const startEditing = () => {
     setEditingItems(items.map((i, idx) => ({ ...i, order_number: idx })));
+    setEditDiscount(Number(prop?.discount || 0));
+    setEditDiscountType(prop?.discount_type || "fixed");
   };
 
   const handleSave = async () => {
@@ -83,10 +112,15 @@ export default function ProposalTab({ project }: { project: ProjectData }) {
     try {
       await updateMutation.mutateAsync({
         id: prop.id,
-        data: { items: editingItems.map((item, idx) => ({ title: item.title, description: item.description, price: Number(item.price), order_number: idx })) },
+        data: {
+          items: editingItems.map((item, idx) => ({ title: item.title, description: item.description, price: Number(item.price), order_number: idx })),
+          discount: editDiscount || 0,
+          discount_type: editDiscountType,
+        },
       });
       setEditingItems(null);
       setEditIdx(null);
+      setEditDiscount(null);
     } catch { /* empty */ }
     setSaving(false);
   };
@@ -144,23 +178,40 @@ export default function ProposalTab({ project }: { project: ProjectData }) {
     try { await updateMutation.mutateAsync({ id: prop.id, data: { status } }); } catch { /* empty */ }
   };
 
+  const handleSaveAsTemplate = async () => {
+    if (!saveTemplateName.trim() || items.length === 0) return;
+    try {
+      await saveTemplateMutation.mutateAsync({
+        name: saveTemplateName.trim(),
+        items: items.map((item, idx) => ({ title: item.title, description: item.description || "", price: Number(item.price), order_number: idx })),
+      });
+      setSaveTemplateName("");
+      setShowSaveTemplate(false);
+    } catch { /* empty */ }
+  };
+
+  const handleApplyTemplate = async (tpl: Template) => {
+    if (!prop) return;
+    try {
+      await updateMutation.mutateAsync({
+        id: prop.id,
+        data: {
+          items: (tpl.items as ProposalItem[]).map((item, idx) => ({ title: item.title, description: item.description || "", price: Number(item.price), order_number: idx })),
+        },
+      });
+      setShowTemplates(false);
+    } catch { /* empty */ }
+  };
+
   const handleDownloadPdf = useCallback(async () => {
     if (!docRef.current) return;
     setGeneratingPdf(true);
     try {
       const el = docRef.current;
-      const canvas = await html2canvas(el, {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: "#ffffff",
-        logging: false,
-      });
+      const canvas = await html2canvas(el, { scale: 2, useCORS: true, allowTaint: true, backgroundColor: "#ffffff", logging: false });
       const imgData = canvas.toDataURL("image/jpeg", 0.95);
-      const pxW = canvas.width;
-      const pxH = canvas.height;
       const pdfW = 210;
-      const pdfH = (pxH * pdfW) / pxW;
+      const pdfH = (canvas.height * pdfW) / canvas.width;
       const pdf = new jsPDF({ orientation: pdfH > pdfW ? "portrait" : "landscape", unit: "mm", format: [pdfW, pdfH] });
       pdf.addImage(imgData, "JPEG", 0, 0, pdfW, pdfH);
       pdf.save(`КП_${project.title || "проект"}.pdf`);
@@ -169,25 +220,30 @@ export default function ProposalTab({ project }: { project: ProjectData }) {
   }, [project.title]);
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="w-8 h-8 border-2 border-terra/30 border-t-terra rounded-full animate-spin" />
-      </div>
-    );
+    return <div className="flex items-center justify-center py-20"><div className="w-8 h-8 border-2 border-terra/30 border-t-terra rounded-full animate-spin" /></div>;
   }
 
   if (!prop) {
     return (
       <div className="bg-white rounded-2xl border border-border p-12 text-center">
-        <div className="w-20 h-20 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
-          <Icon name="FileText" size={36} className="text-stone-light" />
-        </div>
+        <div className="w-20 h-20 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4"><Icon name="FileText" size={36} className="text-stone-light" /></div>
         <h3 className="font-display text-2xl text-stone mb-2">Коммерческое предложение</h3>
         <p className="text-stone-mid text-sm mb-6 max-w-md mx-auto">Создайте КП для клиента с детальным описанием этапов и стоимости работ</p>
         {isDesigner && (
-          <button onClick={handleCreate} disabled={createMutation.isPending} className="terra-gradient text-white px-6 py-3 rounded-xl text-sm font-medium hover:opacity-90 disabled:opacity-50">
-            {createMutation.isPending ? "Создаём..." : "Создать КП"}
-          </button>
+          <div className="flex flex-col items-center gap-3">
+            <button onClick={() => handleCreate()} disabled={createMutation.isPending} className="terra-gradient text-white px-6 py-3 rounded-xl text-sm font-medium hover:opacity-90 disabled:opacity-50">
+              {createMutation.isPending ? "Создаём..." : "Создать КП (стандартный шаблон)"}
+            </button>
+            {(templates as Template[]).length > 0 && (
+              <div className="flex flex-wrap gap-2 justify-center">
+                {(templates as Template[]).map(tpl => (
+                  <button key={tpl.id} onClick={() => handleCreate(tpl.items)} className="text-xs px-3 py-2 rounded-xl border border-border text-stone-mid hover:bg-muted transition-colors">
+                    <Icon name="FileTemplate" size={12} className="inline mr-1" /> {tpl.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </div>
     );
@@ -213,6 +269,12 @@ export default function ProposalTab({ project }: { project: ProjectData }) {
             <button onClick={handleDownloadPdf} disabled={generatingPdf} className="flex items-center gap-1 text-xs px-3 py-2 rounded-xl border border-border text-stone-mid hover:bg-muted transition-colors disabled:opacity-50">
               <Icon name="Download" size={12} /> {generatingPdf ? "Генерация..." : "Скачать PDF"}
             </button>
+            <button onClick={() => setShowTemplates(true)} className="flex items-center gap-1 text-xs px-3 py-2 rounded-xl border border-border text-stone-mid hover:bg-muted transition-colors">
+              <Icon name="LayoutTemplate" size={12} /> Шаблоны
+            </button>
+            <button onClick={() => { setSaveTemplateName(""); setShowSaveTemplate(true); }} className="flex items-center gap-1 text-xs px-3 py-2 rounded-xl border border-dashed border-terra/40 text-terra hover:bg-terra-pale transition-colors">
+              <Icon name="Save" size={12} /> Сохранить как шаблон
+            </button>
             {prop.status === "draft" && (
               <button onClick={() => handleStatusChange("sent")} className="flex items-center gap-1 text-xs px-3 py-2 rounded-xl terra-gradient text-white hover:opacity-90">
                 <Icon name="Send" size={12} className="text-white" /> Отправить клиенту
@@ -231,7 +293,7 @@ export default function ProposalTab({ project }: { project: ProjectData }) {
             <button onClick={handleSave} disabled={saving} className="flex items-center gap-1 text-xs px-3 py-2 rounded-xl terra-gradient text-white hover:opacity-90 disabled:opacity-50">
               <Icon name="Save" size={12} className="text-white" /> {saving ? "Сохранение..." : "Сохранить"}
             </button>
-            <button onClick={() => { setEditingItems(null); setEditIdx(null); }} className="text-xs px-3 py-2 rounded-xl border border-border text-stone-mid hover:bg-muted">Отмена</button>
+            <button onClick={() => { setEditingItems(null); setEditIdx(null); setEditDiscount(null); }} className="text-xs px-3 py-2 rounded-xl border border-border text-stone-mid hover:bg-muted">Отмена</button>
             <button onClick={addItem} className="flex items-center gap-1 text-xs px-3 py-2 rounded-xl border border-dashed border-terra/40 text-terra hover:bg-terra-pale">
               <Icon name="Plus" size={12} /> Добавить пункт
             </button>
@@ -247,15 +309,12 @@ export default function ProposalTab({ project }: { project: ProjectData }) {
             <div className="absolute inset-0 bg-white/85" />
           </div>
         )}
-
         <div className="relative z-10">
           {/* Header */}
           <div className="p-6 md:p-8 border-b border-border/50">
             <div className="flex items-start justify-between gap-4 mb-6">
               <div>
-                <div className="w-10 h-10 terra-gradient rounded-xl flex items-center justify-center mb-3">
-                  <Icon name="Layers" size={18} className="text-white" />
-                </div>
+                <div className="w-10 h-10 terra-gradient rounded-xl flex items-center justify-center mb-3"><Icon name="Layers" size={18} className="text-white" /></div>
                 <h2 className="font-display text-2xl md:text-3xl font-light text-stone">Коммерческое предложение</h2>
                 <p className="text-xs text-stone-light mt-1">{formatDate(prop.created_at)}</p>
               </div>
@@ -273,14 +332,7 @@ export default function ProposalTab({ project }: { project: ProjectData }) {
             {items.map((item, idx) => {
               const isItemEditing = isEditing && editIdx === idx;
               return (
-                <div
-                  key={item.id || idx}
-                  draggable={isEditing}
-                  onDragStart={() => { dragIdx.current = idx; }}
-                  onDragOver={e => handleDragOver(e, idx)}
-                  onDragEnd={() => { dragIdx.current = null; }}
-                  className={`border-b border-border/40 py-5 ${isEditing ? "cursor-grab active:cursor-grabbing hover:bg-terra-pale/30 rounded-xl px-3 -mx-3 transition-colors" : ""}`}
-                >
+                <div key={item.id || idx} draggable={isEditing} onDragStart={() => { dragIdx.current = idx; }} onDragOver={e => handleDragOver(e, idx)} onDragEnd={() => { dragIdx.current = null; }} className={`border-b border-border/40 py-5 ${isEditing ? "cursor-grab active:cursor-grabbing hover:bg-terra-pale/30 rounded-xl px-3 -mx-3 transition-colors" : ""}`}>
                   {isItemEditing ? (
                     <div className="space-y-3">
                       <div className="flex gap-3">
@@ -298,15 +350,11 @@ export default function ProposalTab({ project }: { project: ProjectData }) {
                       <div className="flex items-start justify-between gap-4 mb-2">
                         <div className="flex items-baseline gap-2">
                           {isEditing && <Icon name="GripVertical" size={14} className="text-stone-light mt-0.5 flex-shrink-0" />}
-                          <h3 className="font-semibold text-stone text-base">
-                            <span className="text-stone-light font-normal">{idx + 1}.</span> {item.title}
-                          </h3>
+                          <h3 className="font-semibold text-stone text-base"><span className="text-stone-light font-normal">{idx + 1}.</span> {item.title}</h3>
                         </div>
                         <span className="font-display text-lg font-semibold text-terra whitespace-nowrap">{fmtMoney(Number(item.price))}</span>
                       </div>
-                      {item.description && (
-                        <p className="text-sm text-stone-mid leading-relaxed ml-0 md:ml-5">{item.description}</p>
-                      )}
+                      {item.description && <p className="text-sm text-stone-mid leading-relaxed ml-0 md:ml-5">{item.description}</p>}
                     </div>
                   )}
                 </div>
@@ -318,16 +366,40 @@ export default function ProposalTab({ project }: { project: ProjectData }) {
           <div className="p-6 md:p-8 border-t-2 border-stone/10 bg-muted/20">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
               <div className="space-y-2">
+                {(discount > 0 || isEditing) && (
+                  <div className="space-y-1.5 mb-2">
+                    <div className="flex items-baseline gap-3">
+                      <span className="text-stone-mid text-sm">Подытог:</span>
+                      <span className="font-display text-lg text-stone-mid">{fmtMoney(subtotal)}</span>
+                    </div>
+                    {isEditing ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-green-600">Скидка:</span>
+                        <input type="number" value={editDiscount ?? 0} onChange={e => setEditDiscount(Number(e.target.value) || 0)} className="w-24 px-2 py-1.5 rounded-lg border border-border bg-background text-sm text-stone text-right focus:outline-none focus:ring-2 focus:ring-terra/20" />
+                        <select value={editDiscountType} onChange={e => setEditDiscountType(e.target.value)} className="px-2 py-1.5 rounded-lg border border-border bg-background text-sm text-stone focus:outline-none">
+                          <option value="fixed">₽</option>
+                          <option value="percent">%</option>
+                        </select>
+                        {discountAmount > 0 && editDiscountType === "percent" && (
+                          <span className="text-xs text-green-600">({fmtMoney(discountAmount)})</span>
+                        )}
+                      </div>
+                    ) : discount > 0 ? (
+                      <div className="flex items-baseline gap-3">
+                        <span className="text-green-600 text-sm">Скидка:</span>
+                        <span className="font-semibold text-green-600">
+                          {discountType === "percent" ? `${discount}% (${fmtMoney(discountAmount)})` : fmtMoney(discountAmount)}
+                        </span>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
                 <div className="flex items-baseline gap-3">
                   <span className="text-stone-mid text-sm">Итого:</span>
                   <span className="font-display text-3xl font-light text-stone">{fmtMoney(total)}</span>
                 </div>
-                {pricePerSqm > 0 && (
-                  <p className="text-sm text-stone-mid">Стоимость за м²: <span className="font-semibold text-stone">{fmtMoney(pricePerSqm)}</span></p>
-                )}
-                {project.deadline && (
-                  <p className="text-sm text-stone-mid">Сроки: <span className="font-medium text-stone">до {formatDate(project.deadline)}</span></p>
-                )}
+                {pricePerSqm > 0 && <p className="text-sm text-stone-mid">Стоимость за м²: <span className="font-semibold text-stone">{fmtMoney(pricePerSqm)}</span></p>}
+                {project.deadline && <p className="text-sm text-stone-mid">Сроки: <span className="font-medium text-stone">до {formatDate(project.deadline)}</span></p>}
               </div>
               <div className="text-right text-xs text-stone-mid space-y-0.5">
                 <p className="font-medium text-stone">{user?.first_name} {user?.last_name}</p>
@@ -339,7 +411,7 @@ export default function ProposalTab({ project }: { project: ProjectData }) {
         </div>
       </div>
 
-      {/* Background picker modal */}
+      {/* Background picker */}
       {showBgPicker && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 animate-scale-in">
@@ -347,30 +419,76 @@ export default function ProposalTab({ project }: { project: ProjectData }) {
               <h3 className="font-display text-xl text-stone">Фон КП</h3>
               <button onClick={() => setShowBgPicker(false)} className="p-1.5 hover:bg-muted rounded-lg"><Icon name="X" size={16} className="text-stone-mid" /></button>
             </div>
-
             <p className="text-xs text-stone-light mb-3">Готовые фоны</p>
             <div className="grid grid-cols-2 gap-2 mb-4">
               {PRESET_BACKGROUNDS.map(preset => (
                 <button key={preset.id} onClick={() => handlePresetBg(preset.id)} className={`relative h-16 rounded-xl border-2 overflow-hidden transition-all ${prop?.background_preset === preset.id ? "border-terra" : "border-border hover:border-terra/40"}`}>
-                  {preset.url ? (
-                    <>
-                      <img src={preset.url} alt={preset.label} className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-white/60" />
-                    </>
-                  ) : (
-                    <div className="w-full h-full bg-gradient-to-br from-gray-50 to-white" />
-                  )}
+                  {preset.url ? (<><img src={preset.url} alt={preset.label} className="w-full h-full object-cover" /><div className="absolute inset-0 bg-white/60" /></>) : (<div className="w-full h-full bg-gradient-to-br from-gray-50 to-white" />)}
                   <span className="absolute inset-0 flex items-center justify-center text-xs font-medium text-stone">{preset.label}</span>
                 </button>
               ))}
             </div>
-
             <div className="border-t border-border pt-4">
               <p className="text-xs text-stone-light mb-2">Или загрузите свой</p>
               <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleBgUpload(f); }} />
               <button onClick={() => fileInputRef.current?.click()} disabled={uploadBgMutation.isPending} className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-border text-sm text-stone-mid hover:border-terra/40 hover:text-stone transition-colors disabled:opacity-50">
-                <Icon name="Upload" size={16} />
-                {uploadBgMutation.isPending ? "Загрузка..." : "Загрузить изображение"}
+                <Icon name="Upload" size={16} /> {uploadBgMutation.isPending ? "Загрузка..." : "Загрузить изображение"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Templates modal */}
+      {showTemplates && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 animate-scale-in">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-display text-xl text-stone">Шаблоны КП</h3>
+              <button onClick={() => setShowTemplates(false)} className="p-1.5 hover:bg-muted rounded-lg"><Icon name="X" size={16} className="text-stone-mid" /></button>
+            </div>
+            {(templates as Template[]).length === 0 ? (
+              <div className="text-center py-8">
+                <div className="w-14 h-14 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-3"><Icon name="LayoutTemplate" size={24} className="text-stone-light" /></div>
+                <p className="text-sm text-stone-mid mb-1">Шаблонов пока нет</p>
+                <p className="text-xs text-stone-light">Сохраните текущее КП как шаблон</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {(templates as Template[]).map(tpl => (
+                  <div key={tpl.id} className="flex items-center justify-between p-3 rounded-xl border border-border hover:bg-muted/30 transition-colors">
+                    <div>
+                      <p className="text-sm font-medium text-stone">{tpl.name}</p>
+                      <p className="text-xs text-stone-light">{(tpl.items as ProposalItem[]).length} пунктов — {fmtMoney((tpl.items as ProposalItem[]).reduce((s, i) => s + Number(i.price || 0), 0))}</p>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <button onClick={() => handleApplyTemplate(tpl)} className="text-xs px-3 py-1.5 rounded-lg terra-gradient text-white hover:opacity-90">Применить</button>
+                      <button onClick={async () => { await deleteTemplateMutation.mutateAsync(tpl.id); }} className="p-1.5 rounded-lg border border-red-200 text-red-400 hover:bg-red-50"><Icon name="Trash2" size={12} /></button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Save as template modal */}
+      {showSaveTemplate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 animate-scale-in">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-display text-xl text-stone">Сохранить как шаблон</h3>
+              <button onClick={() => setShowSaveTemplate(false)} className="p-1.5 hover:bg-muted rounded-lg"><Icon name="X" size={16} className="text-stone-mid" /></button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-stone-light mb-1 block">Название шаблона</label>
+                <input value={saveTemplateName} onChange={e => setSaveTemplateName(e.target.value)} placeholder="Например: Полный проект" className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20 focus:border-terra" autoFocus />
+              </div>
+              <p className="text-xs text-stone-light">{items.length} пунктов, {fmtMoney(subtotal)}</p>
+              <button onClick={handleSaveAsTemplate} disabled={!saveTemplateName.trim() || saveTemplateMutation.isPending} className="w-full terra-gradient text-white py-2.5 rounded-xl text-sm font-medium hover:opacity-90 disabled:opacity-50">
+                {saveTemplateMutation.isPending ? "Сохраняем..." : "Сохранить шаблон"}
               </button>
             </div>
           </div>

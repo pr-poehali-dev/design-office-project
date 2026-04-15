@@ -22,6 +22,9 @@ import {
   createProposal,
   updateProposal,
   uploadProposalBg,
+  getProposalTemplates,
+  saveProposalTemplate,
+  deleteProposalTemplate,
 } from "./api";
 
 const STALE_5MIN = 5 * 60 * 1000;
@@ -307,5 +310,32 @@ export function useUploadProposalBg() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["proposal"] });
     },
+  });
+}
+
+export function useProposalTemplates() {
+  return useQuery({
+    queryKey: ["proposal-templates"],
+    queryFn: async () => {
+      const data = await getProposalTemplates();
+      return data.templates || [];
+    },
+    staleTime: STALE_5MIN,
+  });
+}
+
+export function useSaveProposalTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: saveProposalTemplate,
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["proposal-templates"] }); },
+  });
+}
+
+export function useDeleteProposalTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: deleteProposalTemplate,
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["proposal-templates"] }); },
   });
 }

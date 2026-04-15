@@ -267,6 +267,21 @@ export async function deleteProposal(id: string) {
   return handleResponse(res);
 }
 
+export async function getProposalTemplates() {
+  const res = await fetch(`${API_URLS.proposals}?action=templates`, { method: "GET", headers: authHeaders() });
+  return handleResponse(res);
+}
+
+export async function saveProposalTemplate(data: { name: string; items: { title: string; description: string; price: number; order_number: number }[] }) {
+  const res = await fetch(`${API_URLS.proposals}?action=save_template`, { method: "POST", headers: authHeaders(), body: JSON.stringify(data) });
+  return handleResponse(res);
+}
+
+export async function deleteProposalTemplate(id: string) {
+  const res = await fetch(`${API_URLS.proposals}?id=${id}&action=delete_template`, { method: "DELETE", headers: authHeaders() });
+  return handleResponse(res);
+}
+
 // Designers
 export async function getDesigners(params?: {
   city?: string;

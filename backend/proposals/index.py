@@ -185,7 +185,7 @@ def fetch_proposal_with_items(cur, proposal_id):
     """Fetch a proposal and its items."""
     cur.execute(
         f"""SELECT id, project_id, status, background_url, background_preset,
-                   template_name, notes, created_at, updated_at
+                   template_name, notes, discount, discount_type, created_at, updated_at
             FROM {SCHEMA}.proposals WHERE id = %s""",
         (proposal_id,),
     )
@@ -361,7 +361,7 @@ def handle_update(user, proposal_id, body_str):
                 return error_response("Access denied", 403)
 
             # Build update fields
-            updatable = ["status", "background_url", "background_preset", "template_name", "notes"]
+            updatable = ["status", "background_url", "background_preset", "template_name", "notes", "discount", "discount_type"]
             set_parts = []
             values = []
             for field in updatable:
@@ -518,11 +518,82 @@ def handle_delete(user, proposal_id):
         conn.close()
 
 
+def handle_get_templates(user):
+    conn = get_connection()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                f"""SELECT id, name, items, created_at
+                    FROM {SCHEMA}.proposal_templates
+                    WHERE owner_id = %s ORDER BY created_at DESC""",
+                (str(user["id"]),),
+            )
+            rows = cur.fetchall()
+        return json_response({"templates": [dict(r) for r in rows]})
+    except Exception as e:
+        print(f"Get templates error: {e}")
+        return error_response("Internal server error", 500)
+    finally:
+        conn.close()
+
+
+def handle_save_template(user, body_str):
+    try:
+        body = parse_body(body_str)
+    except (json.JSONDecodeError, TypeError):
+        return error_response("Invalid JSON body", 400)
+
+    if not body or not body.get("name") or not body.get("items"):
+        return error_response("name and items are required", 400)
+
+    conn = get_connection()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                f"""INSERT INTO {SCHEMA}.proposal_templates (owner_id, name, items)
+                    VALUES (%s, %s, %s) RETURNING id, name, items, created_at""",
+                (str(user["id"]), body["name"], json.dumps(body["items"], default=str)),
+            )
+            tpl = dict(cur.fetchone())
+            conn.commit()
+        return json_response({"template": tpl}, 201)
+    except Exception as e:
+        conn.rollback()
+        print(f"Save template error: {e}")
+        return error_response("Internal server error", 500)
+    finally:
+        conn.close()
+
+
+def handle_delete_template(user, template_id):
+    conn = get_connection()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                f"SELECT id FROM {SCHEMA}.proposal_templates WHERE id = %s AND owner_id = %s",
+                (template_id, str(user["id"])),
+            )
+            if not cur.fetchone():
+                return error_response("Template not found", 404)
+            cur.execute(
+                f"DELETE FROM {SCHEMA}.proposal_templates WHERE id = %s",
+                (template_id,),
+            )
+            conn.commit()
+        return json_response({"deleted": True})
+    except Exception as e:
+        conn.rollback()
+        print(f"Delete template error: {e}")
+        return error_response("Internal server error", 500)
+    finally:
+        conn.close()
+
+
 # ─── Main handler ────────────────────────────────────────────────────────────
 
 
 def handler(event, context=None):
-    """Управление коммерческими предложениями — создание, редактирование, пункты КП."""
+    """Управление коммерческими предложениями — создание, редактирование, пункты КП, шаблоны."""
     method = event.get("httpMethod", "GET").upper()
     headers = event.get("headers") or {}
     qsp = event.get("queryStringParameters") or {}
@@ -531,30 +602,37 @@ def handler(event, context=None):
     if method == "OPTIONS":
         return {"statusCode": 200, "headers": CORS_HEADERS, "body": ""}
 
-    # Authenticate
     auth_result = authenticate(headers)
     if "statusCode" in auth_result:
         return auth_result
     user = auth_result
 
+    action = qsp.get("action", "")
+
     if method == "GET":
+        if action == "templates":
+            return handle_get_templates(user)
         return handle_get(user, qsp)
 
     if method == "POST":
+        if action == "save_template":
+            return handle_save_template(user, body)
         return handle_create(user, body)
 
     if method == "PUT":
         proposal_id = qsp.get("id")
         if not proposal_id:
             return error_response("id query parameter is required", 400)
-
-        action = qsp.get("action")
         if action == "upload_bg":
             return handle_upload_bg(user, proposal_id, body)
-
         return handle_update(user, proposal_id, body)
 
     if method == "DELETE":
+        if action == "delete_template":
+            template_id = qsp.get("id")
+            if not template_id:
+                return error_response("id query parameter is required", 400)
+            return handle_delete_template(user, template_id)
         proposal_id = qsp.get("id")
         if not proposal_id:
             return error_response("id query parameter is required", 400)
