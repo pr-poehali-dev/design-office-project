@@ -224,6 +224,7 @@ export function EstimateTab({ projectId }: { projectId: string }) {
 
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: "", category: "", quantity: "", unit: "", price_per_unit: "" });
+  const [generatingPdf, setGeneratingPdf] = useState(false);
 
   const grouped = items.reduce<Record<string, EstimateItem[]>>((acc, item) => {
     const cat = item.category || "Без категории";
@@ -255,6 +256,71 @@ export function EstimateTab({ projectId }: { projectId: string }) {
     deleteMutation.mutate({ projectId, itemId });
   };
 
+  const handleExportPdf = async () => {
+    if (items.length === 0) return;
+    setGeneratingPdf(true);
+    try {
+      const { jsPDF } = await import("jspdf");
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const w = pdf.internal.pageSize.getWidth();
+      let y = 20;
+
+      pdf.setFontSize(18);
+      pdf.text("Смета проекта", 14, y);
+      y += 10;
+      pdf.setFontSize(9);
+      pdf.setTextColor(120);
+      pdf.text(`Дата: ${new Date().toLocaleDateString("ru-RU")}`, 14, y);
+      y += 10;
+
+      const grouped2 = items.reduce<Record<string, typeof items>>((acc, item) => {
+        const cat = item.category || "Без категории";
+        if (!acc[cat]) acc[cat] = [];
+        acc[cat].push(item);
+        return acc;
+      }, {});
+
+      for (const [cat, catItems] of Object.entries(grouped2)) {
+        if (y > 260) { pdf.addPage(); y = 20; }
+        pdf.setFontSize(11);
+        pdf.setTextColor(60);
+        pdf.text(cat, 14, y);
+        const catTotal2 = catItems.reduce((s, i) => s + (i.total || 0), 0);
+        pdf.text(fmtMoney(catTotal2), w - 14, y, { align: "right" });
+        y += 2;
+        pdf.setDrawColor(200);
+        pdf.line(14, y, w - 14, y);
+        y += 5;
+
+        pdf.setFontSize(9);
+        for (const item of catItems) {
+          if (y > 275) { pdf.addPage(); y = 20; }
+          pdf.setTextColor(40);
+          pdf.text(item.name, 18, y);
+          pdf.setTextColor(120);
+          pdf.text(`${item.quantity} ${item.unit} × ${fmtMoney(item.price_per_unit)}`, 100, y);
+          pdf.setTextColor(40);
+          pdf.text(fmtMoney(item.total), w - 14, y, { align: "right" });
+          y += 6;
+        }
+        y += 4;
+      }
+
+      if (y > 260) { pdf.addPage(); y = 20; }
+      y += 2;
+      pdf.setDrawColor(60);
+      pdf.line(14, y, w - 14, y);
+      y += 7;
+      pdf.setFontSize(13);
+      pdf.setTextColor(40);
+      pdf.text("Итого:", 14, y);
+      pdf.text(fmtMoney(totalSum), w - 14, y, { align: "right" });
+
+      pdf.save("Смета.pdf");
+    } catch { /* empty */ }
+    setGeneratingPdf(false);
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -278,8 +344,8 @@ export function EstimateTab({ projectId }: { projectId: string }) {
               <Icon name="Plus" size={14} /> Добавить
             </button>
           )}
-          <button className="flex items-center gap-1.5 text-sm px-3.5 py-2 rounded-xl terra-gradient text-white hover:opacity-90 transition-all">
-            <Icon name="Download" size={14} className="text-white" /> PDF
+          <button onClick={handleExportPdf} disabled={generatingPdf || items.length === 0} className="flex items-center gap-1.5 text-sm px-3.5 py-2 rounded-xl terra-gradient text-white hover:opacity-90 transition-all disabled:opacity-50">
+            <Icon name="Download" size={14} className="text-white" /> {generatingPdf ? "Генерация..." : "PDF"}
           </button>
         </div>
       </div>
