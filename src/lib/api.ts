@@ -482,3 +482,29 @@ export async function createClientNote(clientId: string, content: string) {
   const res = await fetch(`${API_URLS.clients}?id=${clientId}&action=notes`, { method: "POST", headers: authHeaders(), body: JSON.stringify({ content }) });
   return handleResponse(res);
 }
+
+// Team
+export async function getTeamMembers() {
+  const res = await fetch(API_URLS.team, { method: "GET", headers: authHeaders() });
+  return handleResponse(res);
+}
+
+export async function getTeamIncomingInvites() {
+  const res = await fetch(`${API_URLS.team}?action=incoming`, { method: "GET", headers: authHeaders() });
+  return handleResponse(res);
+}
+
+export async function inviteToTeam(emailOrId: string, teamRole = "designer") {
+  const res = await fetch(API_URLS.team, { method: "POST", headers: authHeaders(), body: JSON.stringify({ email: emailOrId, team_role: teamRole }) });
+  return handleResponse(res);
+}
+
+export async function updateTeamMember(id: string, data: { accepted?: boolean; team_role?: string; access_permissions?: Record<string, boolean>; allowed_project_ids?: string[] }) {
+  const res = await fetch(`${API_URLS.team}?id=${id}`, { method: "PUT", headers: authHeaders(), body: JSON.stringify(data) });
+  return handleResponse(res);
+}
+
+export async function removeTeamMember(id: string) {
+  const res = await fetch(`${API_URLS.team}?id=${id}`, { method: "DELETE", headers: authHeaders() });
+  return handleResponse(res);
+}

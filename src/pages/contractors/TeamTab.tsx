@@ -1,7 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Icon from "@/components/ui/icon";
-import { useTeam, useProjects, useInviteToTeam, useRemoveTeamMember, useInviteMember, useSendDm } from "@/lib/queries";
+import { toast } from "sonner";
+import { useTeam, useProjects, useInviteToTeam, useRemoveTeamMember } from "@/lib/queries";
+import { updateTeamMember } from "@/lib/api";
+import { useQueryClient } from "@tanstack/react-query";
 
 const TEAM_ROLES: Record<string, string> = {
   designer: "Дизайнер",
@@ -30,6 +33,16 @@ const AVATAR_COLORS = [
   "from-terra to-rose-500",
 ];
 
+const PERMISSION_LABELS: Record<string, string> = {
+  overview: "Обзор проекта",
+  execution: "Выполнение (этапы)",
+  brief: "Бриф",
+  estimate: "Смета",
+  finance: "Финансы",
+  documents: "Документы",
+  proposal: "КП (коммерческое предложение)",
+};
+
 function getAvatarColor(id: string) {
   let hash = 0;
   for (let i = 0; i < id.length; i++) hash = id.charCodeAt(i) + ((hash << 5) - hash);
@@ -39,6 +52,7 @@ function getAvatarColor(id: string) {
 interface TeamMember {
   id: string;
   member_id: string;
+  owner_id: string;
   first_name: string;
   last_name: string;
   email: string;
@@ -47,299 +61,368 @@ interface TeamMember {
   specialization?: string;
   bio?: string;
   rating: number;
+  personal_id?: string;
   team_role: string;
   accepted: boolean;
   invited_at: string;
-  active_projects: number;
-  projects: { id: string; title: string }[];
+  access_permissions: Record<string, boolean>;
+  allowed_project_ids: string[];
+  allowed_projects: { id: string; title: string; status: string }[];
 }
 
 interface TeamTabProps {
   user: { id: string; first_name: string; last_name: string; email: string; role: string };
 }
 
+// ----- Member Access Modal -----
+function MemberAccessModal({
+  member,
+  allProjects,
+  onClose,
+}: {
+  member: TeamMember;
+  allProjects: { id: string; title: string }[];
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const [permissions, setPermissions] = useState<Record<string, boolean>>(
+    member.access_permissions || {
+      overview: true, execution: true, brief: true,
+      estimate: false, finance: false, documents: false, proposal: false,
+    }
+  );
+  const [selectedProjects, setSelectedProjects] = useState<string[]>(
+    member.allowed_project_ids || []
+  );
+  const [saving, setSaving] = useState(false);
+
+  const togglePerm = (key: string) => setPermissions(p => ({ ...p, [key]: !p[key] }));
+
+  const toggleProject = (id: string) =>
+    setSelectedProjects(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await updateTeamMember(member.id, {
+        access_permissions: permissions,
+        allowed_project_ids: selectedProjects,
+      });
+      await qc.invalidateQueries({ queryKey: ["team"] });
+      toast.success("Права доступа сохранены");
+      onClose();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Ошибка сохранения");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+      <div className="bg-white rounded-3xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6">
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <h3 className="font-display text-xl text-stone">Права доступа</h3>
+            <p className="text-sm text-stone-mid">{member.first_name} {member.last_name}</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 hover:bg-muted rounded-lg">
+            <Icon name="X" size={16} className="text-stone-mid" />
+          </button>
+        </div>
+
+        {/* Projects */}
+        <div className="mb-5">
+          <p className="text-sm font-semibold text-stone mb-2">Доступные проекты</p>
+          {allProjects.length === 0 ? (
+            <p className="text-xs text-stone-light">У вас пока нет проектов</p>
+          ) : (
+            <div className="space-y-2">
+              {allProjects.map(p => (
+                <label key={p.id} className="flex items-center gap-3 cursor-pointer group">
+                  <div
+                    onClick={() => toggleProject(p.id)}
+                    className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all flex-shrink-0 ${
+                      selectedProjects.includes(p.id)
+                        ? "bg-terra border-terra"
+                        : "border-border group-hover:border-terra/50"
+                    }`}
+                  >
+                    {selectedProjects.includes(p.id) && <Icon name="Check" size={11} className="text-white" />}
+                  </div>
+                  <span className="text-sm text-stone">{p.title}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Permissions */}
+        <div className="mb-6">
+          <p className="text-sm font-semibold text-stone mb-1">Разделы проекта</p>
+          <p className="text-xs text-stone-light mb-3">Выберите что будет видеть специалист в каждом проекте</p>
+          <div className="space-y-2">
+            {Object.entries(PERMISSION_LABELS).map(([key, label]) => (
+              <label key={key} className="flex items-center gap-3 cursor-pointer group">
+                <div
+                  onClick={() => togglePerm(key)}
+                  className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all flex-shrink-0 ${
+                    permissions[key]
+                      ? "bg-terra border-terra"
+                      : "border-border group-hover:border-terra/50"
+                  }`}
+                >
+                  {permissions[key] && <Icon name="Check" size={11} className="text-white" />}
+                </div>
+                <span className="text-sm text-stone">{label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex gap-3">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-border text-stone-mid text-sm hover:bg-muted transition-colors">
+            Отмена
+          </button>
+          <button onClick={handleSave} disabled={saving} className="flex-1 terra-gradient text-white py-2.5 rounded-xl text-sm font-medium hover:opacity-90 disabled:opacity-60">
+            {saving ? "Сохраняем..." : "Сохранить"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ----- Main Component -----
 export default function TeamTab({ user }: TeamTabProps) {
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const { data: members = [], isLoading } = useTeam();
-  const { data: projects = [] } = useProjects();
+  const { data: allProjects = [] } = useProjects();
   const inviteMutation = useInviteToTeam();
   const removeMutation = useRemoveTeamMember();
 
   const [showInvite, setShowInvite] = useState(false);
   const [invEmail, setInvEmail] = useState("");
   const [invRole, setInvRole] = useState("designer");
+  const [inviting, setInviting] = useState(false);
   const [invResult, setInvResult] = useState("");
   const [search, setSearch] = useState("");
-  const [filterRole, setFilterRole] = useState("all");
-  const [filterProject, setFilterProject] = useState("all");
+  const [editMember, setEditMember] = useState<TeamMember | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
-  const [assignMember, setAssignMember] = useState<TeamMember | null>(null);
-  const [assignProjectId, setAssignProjectId] = useState("");
-  const [assignResult, setAssignResult] = useState("");
-  const assignMutation = useInviteMember();
-  const [dmTarget, setDmTarget] = useState<{ id: string; name: string } | null>(null);
-  const [dmInput, setDmInput] = useState("");
-  const [dmSending, setDmSending] = useState(false);
-  const sendDmMutation = useSendDm({ id: user.id, first_name: user.first_name, last_name: user.last_name });
+
+  const typedMembers = members as TeamMember[];
+  const typedProjects = allProjects as { id: string; title: string }[];
+  const accepted = typedMembers.filter(m => m.accepted);
+  const pending = typedMembers.filter(m => !m.accepted);
+
+  const filtered = typedMembers.filter(m => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return `${m.first_name} ${m.last_name}`.toLowerCase().includes(q) || m.email.toLowerCase().includes(q);
+  });
 
   const handleInvite = async () => {
     if (!invEmail.trim()) return;
+    setInviting(true);
     setInvResult("");
     try {
       await inviteMutation.mutateAsync({ email: invEmail.trim(), team_role: invRole });
-      setInvResult("Приглашение отправлено!");
+      setInvResult("Приглашение отправлено! Специалист увидит его в своих сообщениях.");
       setInvEmail("");
     } catch (err: unknown) {
       setInvResult(err instanceof Error ? err.message : "Ошибка");
+    } finally {
+      setInviting(false);
     }
   };
 
   const handleRemove = async (id: string) => {
     setRemovingId(id);
-    try { await removeMutation.mutateAsync(id); } catch { /* empty */ }
+    try {
+      await removeMutation.mutateAsync(id);
+      toast.success("Специалист удалён из команды");
+    } catch {
+      toast.error("Ошибка удаления");
+    }
     setRemovingId(null);
   };
-
-  const handleAssignToProject = async () => {
-    if (!assignMember || !assignProjectId) return;
-    setAssignResult("");
-    try {
-      await assignMutation.mutateAsync({ email: assignMember.email, project_id: assignProjectId, role: "worker" });
-      setAssignResult("Назначен на проект!");
-      setTimeout(() => { setAssignMember(null); setAssignResult(""); setAssignProjectId(""); }, 1200);
-    } catch (err: unknown) {
-      setAssignResult(err instanceof Error ? err.message : "Ошибка");
-    }
-  };
-
-  const getAvailableProjects = (member: TeamMember) => {
-    const memberProjectIds = new Set((member.projects || []).map(p => p.id));
-    return (projects as { id: string; title: string }[]).filter(p => !memberProjectIds.has(p.id));
-  };
-
-  const filtered = (members as TeamMember[]).filter(m => {
-    if (search) {
-      const q = search.toLowerCase();
-      const name = `${m.first_name} ${m.last_name}`.toLowerCase();
-      if (!name.includes(q) && !m.email.toLowerCase().includes(q)) return false;
-    }
-    if (filterRole !== "all" && m.team_role !== filterRole) return false;
-    if (filterProject !== "all" && !m.projects?.some(p => p.id === filterProject)) return false;
-    return true;
-  });
 
   return (
     <div className="animate-fade-in">
       <div className="flex items-center justify-between mb-5">
         <p className="text-stone-mid text-sm">
-          Всего: {(members as TeamMember[]).length} {(members as TeamMember[]).length === 1 ? "человек" : (members as TeamMember[]).length < 5 ? "человека" : "человек"}
+          {accepted.length} {accepted.length === 1 ? "специалист" : accepted.length < 5 ? "специалиста" : "специалистов"} в команде
+          {pending.length > 0 && <span className="ml-2 text-amber-600">· {pending.length} ожидает ответа</span>}
         </p>
-        <button onClick={() => setShowInvite(true)} className="flex items-center gap-1.5 terra-gradient text-white text-sm font-medium px-4 py-2.5 rounded-xl hover:opacity-90 transition-opacity">
+        <button onClick={() => { setShowInvite(true); setInvResult(""); }} className="flex items-center gap-1.5 terra-gradient text-white text-sm font-medium px-4 py-2.5 rounded-xl hover:opacity-90">
           <Icon name="UserPlus" size={15} className="text-white" />
           <span className="hidden sm:inline">Пригласить</span>
         </button>
       </div>
 
-      <div className="flex flex-wrap gap-2 items-center mb-5">
-        <div className="relative">
+      {/* Search */}
+      {typedMembers.length > 0 && (
+        <div className="relative mb-5">
           <Icon name="Search" size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-light" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Поиск по имени..." className="pl-8 pr-3 py-2 rounded-xl border border-border bg-white text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20 w-48" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Поиск по имени или email..." className="pl-8 pr-3 py-2 rounded-xl border border-border bg-white text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20 w-full max-w-xs" />
         </div>
-        <select value={filterRole} onChange={e => setFilterRole(e.target.value)} className="px-3 py-2 rounded-xl border border-border bg-white text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20">
-          <option value="all">Все роли</option>
-          {Object.entries(TEAM_ROLES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
-        <select value={filterProject} onChange={e => setFilterProject(e.target.value)} className="px-3 py-2 rounded-xl border border-border bg-white text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20">
-          <option value="all">Все проекты</option>
-          {(projects as { id: string; title: string }[]).map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
-        </select>
-        <span className="text-xs text-stone-light ml-auto">{filtered.length} из {(members as TeamMember[]).length}</span>
-      </div>
+      )}
 
       {isLoading ? (
         <div className="flex items-center justify-center py-20">
           <div className="w-8 h-8 border-2 border-terra/30 border-t-terra rounded-full animate-spin" />
         </div>
-      ) : (members as TeamMember[]).length === 0 ? (
+      ) : typedMembers.length === 0 ? (
         <div className="bg-white rounded-2xl border border-border p-12 text-center">
           <div className="w-20 h-20 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
             <Icon name="UsersRound" size={36} className="text-stone-light" />
           </div>
           <h3 className="font-display text-2xl text-stone mb-2">Ваша команда пока пуста</h3>
-          <p className="text-stone-mid text-sm mb-6 max-w-md mx-auto">Пригласите дизайнеров, визуализаторов, чертёжников и других специалистов</p>
+          <p className="text-stone-mid text-sm mb-6 max-w-md mx-auto">Пригласите специалистов из раздела Гильдия или по email/ID</p>
           <button onClick={() => setShowInvite(true)} className="terra-gradient text-white px-6 py-3 rounded-xl text-sm font-medium hover:opacity-90">
             <Icon name="UserPlus" size={15} className="text-white inline mr-1.5" /> Пригласить специалиста
           </button>
         </div>
       ) : (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map(member => {
-            const initials = `${(member.first_name || "")[0] || ""}${(member.last_name || "")[0] || ""}`.toUpperCase();
-            const colorGrad = getAvatarColor(member.member_id);
-            return (
-              <div key={member.id} className="bg-white rounded-2xl border border-border p-5 hover:shadow-md transition-all group">
-                <div className="flex items-start gap-3 mb-4">
-                  <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${colorGrad} flex items-center justify-center text-white font-semibold text-sm flex-shrink-0`}>
-                    {initials}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-semibold text-stone text-sm truncate">{member.first_name} {member.last_name}</h3>
-                      {!member.accepted && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-200 flex-shrink-0">Ожидает</span>
-                      )}
+        <div className="space-y-3">
+          {/* Pending invitations section */}
+          {pending.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide mb-2 px-1">Ожидают ответа</p>
+              <div className="space-y-2">
+                {pending.filter(m => !search || `${m.first_name} ${m.last_name}`.toLowerCase().includes(search.toLowerCase())).map(member => {
+                  const initials = `${(member.first_name || "")[0] || ""}${(member.last_name || "")[0] || ""}`.toUpperCase();
+                  const colorGrad = getAvatarColor(member.member_id);
+                  const roleLabel = TEAM_ROLES[member.team_role] || member.team_role;
+                  const roleColor = ROLE_COLORS[member.team_role] || "bg-muted text-stone-mid border-border";
+                  return (
+                    <div key={member.id} className="bg-amber-50 rounded-2xl border border-amber-200 p-4 flex items-center gap-3 opacity-80">
+                      <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${colorGrad} flex items-center justify-center text-white font-semibold text-sm flex-shrink-0`}>
+                        {initials}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-stone text-sm">{member.first_name} {member.last_name}</div>
+                        <div className="text-xs text-stone-light truncate">{member.email}</div>
+                      </div>
+                      <span className={`text-xs px-2 py-0.5 rounded-full border ${roleColor}`}>{roleLabel}</span>
+                      <span className="text-xs text-amber-600">Ожидает</span>
+                      <button onClick={() => handleRemove(member.id)} disabled={removingId === member.id} className="p-1.5 hover:bg-red-50 rounded-lg text-stone-light hover:text-red-500 transition-colors">
+                        <Icon name="X" size={14} />
+                      </button>
                     </div>
-                    <span className={`inline-flex text-xs px-2 py-0.5 rounded-full border font-medium mt-1 ${ROLE_COLORS[member.team_role] || "bg-muted text-stone-mid border-border"}`}>
-                      {TEAM_ROLES[member.team_role] || member.team_role}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="space-y-2 mb-4">
-                  <div className="flex items-center gap-2 text-xs text-stone-mid">
-                    <Icon name="Briefcase" size={12} className="text-stone-light flex-shrink-0" />
-                    <span>{member.active_projects || 0} активных проектов</span>
-                  </div>
-                  {member.rating > 0 && (
-                    <div className="flex items-center gap-2 text-xs text-stone-mid">
-                      <span className="text-amber-400">★</span>
-                      <span>{Number(member.rating).toFixed(1)}</span>
-                    </div>
-                  )}
-                  <div className="flex items-center gap-2 text-xs text-stone-mid">
-                    <Icon name="Mail" size={12} className="text-stone-light flex-shrink-0" />
-                    <span className="truncate">{member.email}</span>
-                  </div>
-                  {member.phone && (
-                    <div className="flex items-center gap-2 text-xs text-stone-mid">
-                      <Icon name="Phone" size={12} className="text-stone-light flex-shrink-0" />
-                      <span>{member.phone}</span>
-                    </div>
-                  )}
-                </div>
-
-                {member.projects && member.projects.length > 0 && (
-                  <div className="mb-4">
-                    <p className="text-xs text-stone-light mb-1.5">Проекты:</p>
-                    <div className="flex flex-wrap gap-1">
-                      {member.projects.slice(0, 3).map(p => (
-                        <button key={p.id} onClick={() => navigate(`/project/${p.id}`)} className="text-xs px-2 py-0.5 rounded-full bg-muted text-stone-mid border border-border hover:border-terra/30 transition-colors truncate max-w-[120px]">
-                          {p.title}
-                        </button>
-                      ))}
-                      {member.projects.length > 3 && (
-                        <span className="text-xs text-stone-light">+{member.projects.length - 3}</span>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex gap-2 pt-3 border-t border-border">
-                  <button onClick={() => { setAssignMember(member); setAssignProjectId(""); setAssignResult(""); }} className="flex-1 flex items-center justify-center gap-1 text-xs py-2 rounded-xl terra-gradient text-white hover:opacity-90 transition-opacity">
-                    <Icon name="FolderPlus" size={12} className="text-white" /> На проект
-                  </button>
-                  {member.member_id !== user.id && (
-                    <button onClick={() => setDmTarget({ id: member.member_id, name: `${member.first_name} ${member.last_name}` })} className="flex-1 flex items-center justify-center gap-1 text-xs py-2 rounded-xl border border-border text-stone-mid hover:bg-muted transition-colors">
-                      <Icon name="MessageCircle" size={12} /> Написать
-                    </button>
-                  )}
-                  <button onClick={() => navigate(`/guild/designer/${member.member_id}`)} className="flex items-center justify-center gap-1 text-xs py-2 px-3 rounded-xl border border-border text-stone-mid hover:bg-muted transition-colors">
-                    <Icon name="User" size={12} />
-                  </button>
-                  <button onClick={() => handleRemove(member.id)} disabled={removingId === member.id} className="flex items-center justify-center gap-1 text-xs py-2 px-3 rounded-xl border border-red-200 text-red-400 hover:bg-red-50 transition-colors disabled:opacity-40">
-                    <Icon name="UserMinus" size={12} />
-                  </button>
-                </div>
+                  );
+                })}
               </div>
-            );
-          })}
+            </div>
+          )}
+
+          {/* Accepted members */}
+          {accepted.length > 0 && (
+            <div>
+              {pending.length > 0 && <p className="text-xs font-semibold text-stone-mid uppercase tracking-wide mb-2 px-1">Специалисты</p>}
+              <div className="grid sm:grid-cols-2 gap-4">
+                {accepted.filter(m => !search || `${m.first_name} ${m.last_name}`.toLowerCase().includes(search.toLowerCase())).map(member => {
+                  const initials = `${(member.first_name || "")[0] || ""}${(member.last_name || "")[0] || ""}`.toUpperCase();
+                  const colorGrad = getAvatarColor(member.member_id);
+                  const roleLabel = TEAM_ROLES[member.team_role] || member.team_role;
+                  const roleColor = ROLE_COLORS[member.team_role] || "bg-muted text-stone-mid border-border";
+                  const allowedProjects = member.allowed_projects || [];
+                  const permCount = Object.values(member.access_permissions || {}).filter(Boolean).length;
+                  return (
+                    <div key={member.id} className="bg-white rounded-2xl border border-border p-5 hover:shadow-md transition-all">
+                      <div className="flex items-start gap-3 mb-4">
+                        <div
+                          className={`w-12 h-12 rounded-xl bg-gradient-to-br ${colorGrad} flex items-center justify-center text-white font-semibold text-sm flex-shrink-0 cursor-pointer`}
+                          onClick={() => navigate(`/designer/${member.personal_id || member.member_id}`)}
+                        >
+                          {initials}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <button onClick={() => navigate(`/designer/${member.personal_id || member.member_id}`)} className="font-semibold text-stone text-sm hover:text-terra transition-colors text-left">
+                            {member.first_name} {member.last_name}
+                          </button>
+                          <div className="text-xs text-stone-light truncate">{member.email}</div>
+                          {member.city && <div className="text-xs text-stone-light">{member.city}</div>}
+                        </div>
+                        <button onClick={() => handleRemove(member.id)} disabled={removingId === member.id} className="p-1.5 hover:bg-red-50 rounded-lg text-stone-light hover:text-red-500 transition-colors flex-shrink-0">
+                          <Icon name="Trash2" size={14} />
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-2 mb-3 flex-wrap">
+                        <span className={`text-xs px-2.5 py-1 rounded-full border ${roleColor}`}>{roleLabel}</span>
+                      </div>
+
+                      {/* Projects access */}
+                      <div className="mb-3">
+                        <p className="text-xs text-stone-light mb-1">
+                          {allowedProjects.length === 0 ? "Нет доступа к проектам" : `Проекты: ${allowedProjects.map(p => p.title).join(", ")}`}
+                        </p>
+                        <p className="text-xs text-stone-light">Разделы: {permCount} из {Object.keys(PERMISSION_LABELS).length}</p>
+                      </div>
+
+                      <button
+                        onClick={() => setEditMember(member)}
+                        className="w-full flex items-center justify-center gap-1.5 text-xs text-terra border border-terra/30 rounded-xl py-2 hover:bg-terra-pale transition-colors"
+                      >
+                        <Icon name="Settings" size={13} /> Права доступа
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
+      {/* Invite Modal */}
       {showInvite && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 animate-scale-in">
-            <div className="flex items-center justify-between mb-4">
+          <div className="bg-white rounded-3xl shadow-xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-5">
               <h3 className="font-display text-xl text-stone">Пригласить специалиста</h3>
-              <button onClick={() => { setShowInvite(false); setInvResult(""); }} className="p-1.5 hover:bg-muted rounded-lg"><Icon name="X" size={16} className="text-stone-mid" /></button>
+              <button onClick={() => setShowInvite(false)} className="p-1.5 hover:bg-muted rounded-lg"><Icon name="X" size={16} className="text-stone-mid" /></button>
             </div>
             <div className="space-y-3">
               <div>
-                <label className="text-xs text-stone-light mb-1 block">Email или личный ID</label>
-                <input value={invEmail} onChange={e => setInvEmail(e.target.value)} placeholder="email@example.com или 998E6648" className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20 focus:border-terra" />
+                <label className="text-xs text-stone-light mb-1 block">Email или личный ID специалиста</label>
+                <input
+                  value={invEmail}
+                  onChange={e => setInvEmail(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && handleInvite()}
+                  placeholder="email@example.com или ID (напр. A3B1C2D4)"
+                  className="w-full px-3 py-2.5 rounded-xl border border-border text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20"
+                />
               </div>
               <div>
                 <label className="text-xs text-stone-light mb-1 block">Роль</label>
-                <select value={invRole} onChange={e => setInvRole(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20">
+                <select value={invRole} onChange={e => setInvRole(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20">
                   {Object.entries(TEAM_ROLES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                 </select>
               </div>
-              {invResult && <p className={`text-xs ${invResult.includes("отправлено") ? "text-green-600" : "text-red-500"}`}>{invResult}</p>}
-              <button onClick={handleInvite} disabled={inviteMutation.isPending} className="w-full terra-gradient text-white py-2.5 rounded-xl text-sm font-medium hover:opacity-90 disabled:opacity-50">
-                {inviteMutation.isPending ? "Отправляем..." : "Пригласить"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {assignMember && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 animate-scale-in">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-display text-xl text-stone">Назначить на проект</h3>
-              <button onClick={() => { setAssignMember(null); setAssignResult(""); }} className="p-1.5 hover:bg-muted rounded-lg"><Icon name="X" size={16} className="text-stone-mid" /></button>
-            </div>
-            <p className="text-sm text-stone-mid mb-4">{assignMember.first_name} {assignMember.last_name} — {TEAM_ROLES[assignMember.team_role] || assignMember.team_role}</p>
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs text-stone-light mb-1 block">Выберите проект</label>
-                {getAvailableProjects(assignMember).length === 0 ? (
-                  <p className="text-xs text-stone-mid py-2">Участник уже назначен на все ваши проекты</p>
-                ) : (
-                  <select value={assignProjectId} onChange={e => setAssignProjectId(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20">
-                    <option value="">Выберите проект...</option>
-                    {getAvailableProjects(assignMember).map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
-                  </select>
-                )}
-              </div>
-              {assignResult && <p className={`text-xs ${assignResult.includes("Назначен") ? "text-green-600" : "text-red-500"}`}>{assignResult}</p>}
-              {getAvailableProjects(assignMember).length > 0 && (
-                <button onClick={handleAssignToProject} disabled={!assignProjectId || assignMutation.isPending} className="w-full terra-gradient text-white py-2.5 rounded-xl text-sm font-medium hover:opacity-90 disabled:opacity-50">
-                  {assignMutation.isPending ? "Назначаем..." : "Назначить"}
-                </button>
+              {invResult && (
+                <p className={`text-xs ${invResult.includes("отправлено") || invResult.includes("!") ? "text-green-600" : "text-red-500"}`}>{invResult}</p>
               )}
+              <button onClick={handleInvite} disabled={!invEmail.trim() || inviting} className="w-full terra-gradient text-white py-2.5 rounded-xl text-sm font-medium hover:opacity-90 disabled:opacity-50">
+                {inviting ? "Отправляем..." : "Отправить приглашение"}
+              </button>
+              <p className="text-xs text-stone-light text-center">Специалист получит уведомление в разделе Сообщения</p>
             </div>
           </div>
         </div>
       )}
 
-      {dmTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 animate-scale-in">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-display text-xl text-stone">Написать {dmTarget.name}</h3>
-              <button onClick={() => { setDmTarget(null); setDmInput(""); }} className="p-1.5 hover:bg-muted rounded-lg"><Icon name="X" size={16} className="text-stone-mid" /></button>
-            </div>
-            <textarea value={dmInput} onChange={e => setDmInput(e.target.value)} placeholder="Ваше сообщение..." rows={4} className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-stone text-sm focus:outline-none focus:ring-2 focus:ring-terra/20 resize-none mb-3" autoFocus />
-            <button
-              onClick={async () => {
-                if (!dmInput.trim()) return;
-                setDmSending(true);
-                try {
-                  await sendDmMutation.mutateAsync({ receiver_id: dmTarget.id, content: dmInput.trim() });
-                  setDmTarget(null);
-                  setDmInput("");
-                } catch { /* empty */ }
-                setDmSending(false);
-              }}
-              disabled={!dmInput.trim() || dmSending}
-              className="w-full terra-gradient text-white py-2.5 rounded-xl text-sm font-medium hover:opacity-90 disabled:opacity-50"
-            >
-              {dmSending ? "Отправка..." : "Отправить"}
-            </button>
-          </div>
-        </div>
+      {/* Access Rights Modal */}
+      {editMember && (
+        <MemberAccessModal
+          member={editMember}
+          allProjects={typedProjects}
+          onClose={() => setEditMember(null)}
+        />
       )}
     </div>
   );

@@ -265,7 +265,7 @@ def handle_dm_send(body_str, user):
 
 
 def handle_inbox(user):
-    """GET ?action=inbox — входящие: последние сообщения по проектам + личные переписки."""
+    """GET ?action=inbox — входящие: проектный чат, личные переписки, приглашения в команду."""
     uid = str(user["id"])
     conn = get_connection()
     try:
@@ -289,16 +289,18 @@ def handle_inbox(user):
             project_messages = [dict(r) for r in cur.fetchall()]
             project_messages.sort(key=lambda x: x["created_at"], reverse=True)
 
+            # DMs excluding TEAM_INVITE system messages
             cur.execute(
                 f"""SELECT DISTINCT ON (peer_id)
                            sub.id, sub.sender_id, sub.receiver_id, sub.content, sub.is_read, sub.created_at,
                            sub.peer_id,
                            pu.first_name AS peer_first_name, pu.last_name AS peer_last_name
                     FROM (
-                        SELECT dm.*, 
+                        SELECT dm.*,
                                CASE WHEN dm.sender_id = %s THEN dm.receiver_id ELSE dm.sender_id END AS peer_id
                         FROM {SCHEMA}.direct_messages dm
-                        WHERE dm.sender_id = %s OR dm.receiver_id = %s
+                        WHERE (dm.sender_id = %s OR dm.receiver_id = %s)
+                          AND dm.content NOT LIKE 'TEAM_INVITE:%%'
                     ) sub
                     JOIN {SCHEMA}.users pu ON pu.id = sub.peer_id
                     ORDER BY peer_id, sub.created_at DESC""",
@@ -307,9 +309,31 @@ def handle_inbox(user):
             dm_conversations = [dict(r) for r in cur.fetchall()]
             dm_conversations.sort(key=lambda x: x["created_at"], reverse=True)
 
+            # Team invitations — pending only for current user as member
+            cur.execute(
+                f"""
+                SELECT
+                    tm.id AS team_member_id,
+                    tm.owner_id,
+                    tm.team_role,
+                    tm.invited_at,
+                    tm.access_permissions,
+                    u.first_name AS owner_first_name,
+                    u.last_name AS owner_last_name,
+                    u.personal_id AS owner_personal_id
+                FROM {SCHEMA}.team_members tm
+                JOIN {SCHEMA}.users u ON u.id = tm.owner_id
+                WHERE tm.member_id = %s AND tm.accepted = false
+                ORDER BY tm.invited_at DESC
+                """,
+                (uid,),
+            )
+            team_invitations = [dict(r) for r in cur.fetchall()]
+
         return json_response({
             "project_messages": project_messages,
             "dm_conversations": dm_conversations,
+            "team_invitations": team_invitations,
         })
     except Exception as e:
         print(f"Inbox error: {e}")
@@ -343,10 +367,17 @@ def handle_unread_count(user):
             )
             project_unread = cur.fetchone()["cnt"]
 
+            cur.execute(
+                f"SELECT COUNT(*) AS cnt FROM {SCHEMA}.team_members WHERE member_id = %s AND accepted = false",
+                (uid,),
+            )
+            invite_unread = cur.fetchone()["cnt"]
+
         return json_response({
             "dm_unread": dm_unread,
             "project_unread": project_unread,
-            "total_unread": dm_unread + project_unread,
+            "invite_unread": invite_unread,
+            "total_unread": dm_unread + project_unread + invite_unread,
         })
     except Exception as e:
         print(f"Unread count error: {e}")

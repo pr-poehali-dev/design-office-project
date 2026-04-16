@@ -3,6 +3,9 @@ import { useNavigate } from "react-router-dom";
 import Icon from "@/components/ui/icon";
 import { useAuth } from "@/lib/auth";
 import { useInbox, useDmMessages, useSendDm, useMarkRead } from "@/lib/queries";
+import { updateTeamMember } from "@/lib/api";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 interface ProjectMsg {
   id: string;
@@ -28,6 +31,17 @@ interface DmConversation {
   peer_last_name: string;
 }
 
+interface TeamInvitation {
+  team_member_id: string;
+  owner_id: string;
+  team_role: string;
+  invited_at: string;
+  access_permissions: Record<string, boolean>;
+  owner_first_name: string;
+  owner_last_name: string;
+  owner_personal_id: string;
+}
+
 interface DmMsg {
   id: string;
   sender_id: string;
@@ -38,6 +52,14 @@ interface DmMsg {
   sender_first_name: string;
   sender_last_name: string;
 }
+
+const TEAM_ROLES: Record<string, string> = {
+  designer: "Дизайнер",
+  visualizer: "Визуализатор",
+  draftsman: "Чертёжник",
+  procurement: "Комплектатор",
+  foreman: "Прораб",
+};
 
 function timeAgo(dateStr: string) {
   const now = new Date();
@@ -61,24 +83,34 @@ function formatTime(dateStr: string) {
 export default function InboxBlock() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const { data: inbox, isLoading } = useInbox();
-  const [tab, setTab] = useState<"projects" | "personal">("projects");
+  const [tab, setTab] = useState<"projects" | "personal" | "invites">("projects");
   const [openDmPeer, setOpenDmPeer] = useState<{ id: string; name: string } | null>(null);
   const [dmInput, setDmInput] = useState("");
   const chatRef = useRef<HTMLDivElement>(null);
   const markRead = useMarkRead();
+  const [processingInvite, setProcessingInvite] = useState<string | null>(null);
 
   const { data: dmMessages = [] } = useDmMessages(openDmPeer?.id);
   const sendDmMutation = useSendDm(user ? { id: user.id, first_name: user.first_name, last_name: user.last_name } : undefined);
 
   const projectMessages = (inbox?.project_messages || []) as ProjectMsg[];
   const dmConversations = (inbox?.dm_conversations || []) as DmConversation[];
+  const teamInvitations = (inbox?.team_invitations || []) as TeamInvitation[];
 
   useEffect(() => {
     if (openDmPeer && chatRef.current) {
       chatRef.current.scrollTo(0, chatRef.current.scrollHeight);
     }
   }, [dmMessages, openDmPeer]);
+
+  // Auto-switch to invites tab if there are invitations
+  useEffect(() => {
+    if (teamInvitations.length > 0 && tab === "projects" && projectMessages.length === 0) {
+      setTab("invites");
+    }
+  }, [teamInvitations.length]);
 
   const handleSendDm = async () => {
     if (!dmInput.trim() || !openDmPeer) return;
@@ -91,6 +123,21 @@ export default function InboxBlock() {
   const handleOpenDm = (peerId: string, peerName: string) => {
     setOpenDmPeer({ id: peerId, name: peerName });
     markRead.mutate({ peer_id: peerId });
+  };
+
+  const handleInviteResponse = async (inviteId: string, accepted: boolean) => {
+    setProcessingInvite(inviteId);
+    try {
+      await updateTeamMember(inviteId, { accepted });
+      await qc.invalidateQueries({ queryKey: ["inbox"] });
+      await qc.invalidateQueries({ queryKey: ["unread"] });
+      await qc.invalidateQueries({ queryKey: ["projects"] });
+      toast.success(accepted ? "Вы вступили в команду!" : "Приглашение отклонено");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Ошибка");
+    } finally {
+      setProcessingInvite(null);
+    }
   };
 
   if (isLoading) {
@@ -153,6 +200,9 @@ export default function InboxBlock() {
           <Icon name="Inbox" size={13} className="text-white" />
         </div>
         <span className="font-semibold text-stone text-sm">Входящие</span>
+        {teamInvitations.length > 0 && (
+          <span className="ml-auto w-5 h-5 bg-terra rounded-full text-white text-xs flex items-center justify-center">{teamInvitations.length}</span>
+        )}
       </div>
 
       {/* Tabs */}
@@ -161,13 +211,22 @@ export default function InboxBlock() {
           onClick={() => setTab("projects")}
           className={`flex-1 text-xs py-1.5 rounded-lg font-medium transition-all ${tab === "projects" ? "bg-white text-stone shadow-sm" : "text-stone-mid hover:text-stone"}`}
         >
-          По проектам {projectMessages.length > 0 && `(${projectMessages.length})`}
+          Проекты {projectMessages.length > 0 && `(${projectMessages.length})`}
         </button>
         <button
           onClick={() => setTab("personal")}
           className={`flex-1 text-xs py-1.5 rounded-lg font-medium transition-all ${tab === "personal" ? "bg-white text-stone shadow-sm" : "text-stone-mid hover:text-stone"}`}
         >
           Личные {dmConversations.length > 0 && `(${dmConversations.length})`}
+        </button>
+        <button
+          onClick={() => setTab("invites")}
+          className={`flex-1 text-xs py-1.5 rounded-lg font-medium transition-all relative ${tab === "invites" ? "bg-white text-stone shadow-sm" : "text-stone-mid hover:text-stone"}`}
+        >
+          Команда
+          {teamInvitations.length > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 bg-terra rounded-full text-white text-[8px] flex items-center justify-center">{teamInvitations.length}</span>
+          )}
         </button>
       </div>
 
@@ -216,31 +275,85 @@ export default function InboxBlock() {
                 <Icon name="MessageCircle" size={18} className="text-stone-light" />
               </div>
               <p className="text-xs text-stone-mid">Нет личных сообщений</p>
-              <p className="text-[10px] text-stone-light mt-1">Напишите дизайнеру из Гильдии или участнику Команды</p>
             </div>
           ) : dmConversations.map(conv => {
-            const peerName = `${conv.peer_first_name} ${conv.peer_last_name}`.trim();
-            const isUnread = !conv.is_read && conv.receiver_id === user?.id;
+            const peerName = `${conv.peer_first_name || ""} ${conv.peer_last_name || ""}`.trim() || "Собеседник";
+            const isUnread = !conv.is_read && conv.sender_id !== user?.id;
             return (
               <button
-                key={conv.id}
+                key={conv.peer_id}
                 onClick={() => handleOpenDm(conv.peer_id, peerName)}
                 className="w-full text-left p-3 rounded-xl hover:bg-muted/50 transition-colors"
               >
                 <div className="flex items-start gap-2.5">
-                  <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 mt-0.5">
-                    {conv.peer_first_name?.[0] || "?"}
+                  <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                    {peerName[0]}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2 mb-0.5">
-                      <span className="text-xs font-semibold text-stone truncate">{peerName}</span>
-                      <span className="text-[10px] text-stone-light whitespace-nowrap flex-shrink-0">{timeAgo(conv.created_at)}</span>
+                      <span className={`text-xs ${isUnread ? "font-bold text-stone" : "font-semibold text-stone"} truncate`}>{peerName}</span>
+                      <span className="text-[10px] text-stone-light whitespace-nowrap">{timeAgo(conv.created_at)}</span>
                     </div>
                     <p className="text-xs text-stone-mid truncate">{conv.content}</p>
                   </div>
                   {isUnread && <div className="w-2 h-2 bg-terra rounded-full flex-shrink-0 mt-2" />}
                 </div>
               </button>
+            );
+          })}
+        </div>
+      )}
+
+      {tab === "invites" && (
+        <div className="space-y-3">
+          {teamInvitations.length === 0 ? (
+            <div className="text-center py-6">
+              <div className="w-10 h-10 bg-muted rounded-xl flex items-center justify-center mx-auto mb-2">
+                <Icon name="UsersRound" size={18} className="text-stone-light" />
+              </div>
+              <p className="text-xs text-stone-mid">Нет приглашений в команду</p>
+            </div>
+          ) : teamInvitations.map(inv => {
+            const ownerName = `${inv.owner_first_name || ""} ${inv.owner_last_name || ""}`.trim();
+            const roleLabel = TEAM_ROLES[inv.team_role] || inv.team_role;
+            const isProcessing = processingInvite === inv.team_member_id;
+            return (
+              <div key={inv.team_member_id} className="bg-muted/50 rounded-2xl p-4">
+                <div className="flex items-start gap-3 mb-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-terra to-rose-500 rounded-xl flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
+                    {ownerName[0] || "?"}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-stone-mid mb-0.5">Приглашение в команду</p>
+                    <button
+                      onClick={() => navigate(`/designer/${inv.owner_personal_id}`)}
+                      className="font-semibold text-stone text-sm hover:text-terra transition-colors"
+                    >
+                      {ownerName}
+                    </button>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-xs bg-terra-pale text-terra px-2 py-0.5 rounded-full">{roleLabel}</span>
+                      <span className="text-xs text-stone-light">{timeAgo(inv.invited_at)}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleInviteResponse(inv.team_member_id, false)}
+                    disabled={isProcessing}
+                    className="flex-1 py-2 rounded-xl border border-border text-stone-mid text-xs font-medium hover:bg-muted transition-colors disabled:opacity-50"
+                  >
+                    Отклонить
+                  </button>
+                  <button
+                    onClick={() => handleInviteResponse(inv.team_member_id, true)}
+                    disabled={isProcessing}
+                    className="flex-1 py-2 rounded-xl terra-gradient text-white text-xs font-medium hover:opacity-90 disabled:opacity-50"
+                  >
+                    {isProcessing ? "..." : "Принять"}
+                  </button>
+                </div>
+              </div>
             );
           })}
         </div>
