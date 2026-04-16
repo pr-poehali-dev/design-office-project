@@ -167,6 +167,61 @@ export default function InboxBlock() {
             </div>
           ) : (dmMessages as DmMsg[]).map(msg => {
             const isMe = msg.sender_id === user?.id;
+
+            // Parse TEAM_INVITE system message
+            if (msg.content.startsWith("TEAM_INVITE:")) {
+              const parts = msg.content.split(":");
+              // Format: TEAM_INVITE:{uuid}:{name}:{personalId}
+              // uuid contains dashes so we split carefully
+              const teamMemberId = parts[1];
+              const inviterName = parts[2] || "";
+              const inviterPersonalId = parts[3] || "";
+              const existingInvite = teamInvitations.find(inv => inv.team_member_id === teamMemberId);
+              const isProcessing = processingInvite === teamMemberId;
+
+              return (
+                <div key={msg.id} className="flex justify-start">
+                  <div className="w-full max-w-[92%] bg-white border border-border rounded-2xl p-4 shadow-sm">
+                    <div className="flex items-center gap-2.5 mb-3">
+                      <div className="w-9 h-9 bg-gradient-to-br from-terra to-rose-500 rounded-xl flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
+                        {inviterName[0] || "?"}
+                      </div>
+                      <div>
+                        <p className="text-[11px] text-stone-light mb-0.5">Приглашение в команду</p>
+                        <button
+                          onClick={() => navigate(`/designer/${inviterPersonalId}`)}
+                          className="font-semibold text-stone text-sm hover:text-terra transition-colors"
+                        >
+                          {inviterName}
+                        </button>
+                      </div>
+                    </div>
+                    {existingInvite ? (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleInviteResponse(teamMemberId, false)}
+                          disabled={isProcessing}
+                          className="flex-1 py-1.5 rounded-xl border border-border text-stone-mid text-xs font-medium hover:bg-muted transition-colors disabled:opacity-50"
+                        >
+                          Отклонить
+                        </button>
+                        <button
+                          onClick={() => handleInviteResponse(teamMemberId, true)}
+                          disabled={isProcessing}
+                          className="flex-1 py-1.5 rounded-xl terra-gradient text-white text-xs font-medium hover:opacity-90 disabled:opacity-50"
+                        >
+                          {isProcessing ? "..." : "Принять"}
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-stone-light text-center py-1">Приглашение обработано</p>
+                    )}
+                    <p className="text-[10px] text-stone-light text-right mt-2">{formatTime(msg.created_at)}</p>
+                  </div>
+                </div>
+              );
+            }
+
             return (
               <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
                 <div className={`max-w-[80%] rounded-xl px-2.5 py-1.5 ${isMe ? "terra-gradient" : "bg-muted"}`}>
