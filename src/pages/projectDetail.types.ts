@@ -4,7 +4,7 @@ export const STYLE_OPTIONS = ["Modern", "Loft", "Scandinavian", "Classic", "Mini
 
 export const NAV_ITEMS = [
   { icon: "LayoutDashboard", label: "Дашборд", id: "dashboard", path: "/dashboard" },
-  { icon: "FolderOpen", label: "Проекты", id: "projects", path: "/dashboard" },
+  { icon: "FolderOpen", label: "Проекты", id: "projects", path: "/dashboard?tab=projects" },
   { icon: "CheckSquare", label: "Задачи", id: "tasks", path: "/tasks" },
   { icon: "Users", label: "Клиенты", id: "clients", path: "/dashboard" },
   { icon: "Handshake", label: "Гильдия", id: "guild", path: "/guild" },

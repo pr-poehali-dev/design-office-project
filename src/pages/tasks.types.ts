@@ -32,11 +32,11 @@ export const STATUS_LABELS: Record<TaskStatus, string> = {
 
 export const NAV_ITEMS = [
   { icon: "LayoutDashboard", label: "Дашборд", id: "dashboard", path: "/dashboard" },
-  { icon: "FolderOpen", label: "Проекты", id: "projects", path: "/dashboard" },
+  { icon: "FolderOpen", label: "Проекты", id: "projects", path: "/dashboard?tab=projects" },
   { icon: "CheckSquare", label: "Задачи", id: "tasks", path: "/tasks" },
   { icon: "BookUser", label: "Контрагенты", id: "contractors", path: "/contractors" },
   { icon: "Users", label: "Гильдия", id: "guild", path: "/guild" },
-  { icon: "User", label: "Профиль", id: "profile", path: "/dashboard" },
+  { icon: "User", label: "Профиль", id: "profile", path: "/dashboard?tab=profile" },
 ];
 
 export interface TeamMember {
