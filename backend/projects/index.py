@@ -125,34 +125,59 @@ def handle_list_projects(user):
     conn = get_connection()
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            uid = str(user["id"])
+
             if user["role"] == "designer":
+                # Own projects
                 cur.execute(
                     f"""SELECT p.*, u.first_name AS designer_first_name,
                                u.last_name AS designer_last_name,
-                               c.name AS client_name
+                               c.name AS client_name,
+                               false AS is_team_project
                         FROM {SCHEMA}.projects p
                         JOIN {SCHEMA}.users u ON u.id = p.designer_id
                         LEFT JOIN {SCHEMA}.clients c ON c.id = p.client_id
                         WHERE p.designer_id = %s
                         ORDER BY p.created_at DESC""",
-                    (str(user["id"]),),
+                    (uid,),
                 )
+                own_rows = [dict(r) for r in cur.fetchall()]
+
+                # Team projects: projects from allowed_project_ids in accepted team_members
+                cur.execute(
+                    f"""SELECT DISTINCT p.*, u.first_name AS designer_first_name,
+                               u.last_name AS designer_last_name,
+                               c.name AS client_name,
+                               true AS is_team_project,
+                               tm.access_permissions
+                        FROM {SCHEMA}.team_members tm
+                        JOIN {SCHEMA}.projects p ON p.id = ANY(tm.allowed_project_ids)
+                        JOIN {SCHEMA}.users u ON u.id = p.designer_id
+                        LEFT JOIN {SCHEMA}.clients c ON c.id = p.client_id
+                        WHERE tm.member_id = %s AND tm.accepted = true
+                          AND p.designer_id != %s
+                        ORDER BY p.created_at DESC""",
+                    (uid, uid),
+                )
+                team_rows = [dict(r) for r in cur.fetchall()]
+                rows = own_rows + team_rows
             else:
                 cur.execute(
                     f"""SELECT p.*, u.first_name AS designer_first_name,
                                u.last_name AS designer_last_name,
-                               c.name AS client_name
+                               c.name AS client_name,
+                               false AS is_team_project
                         FROM {SCHEMA}.projects p
                         JOIN {SCHEMA}.users u ON u.id = p.designer_id
                         LEFT JOIN {SCHEMA}.clients c ON c.id = p.client_id
                         JOIN {SCHEMA}.project_members pm ON pm.project_id = p.id
                         WHERE pm.user_id = %s AND pm.accepted = true
                         ORDER BY p.created_at DESC""",
-                    (str(user["id"]),),
+                    (uid,),
                 )
-            rows = cur.fetchall()
+                rows = [dict(r) for r in cur.fetchall()]
 
-        return json_response({"projects": [dict(r) for r in rows]})
+        return json_response({"projects": rows})
     except Exception as e:
         print(f"List projects error: {e}")
         return error_response("Internal server error", 500)
@@ -277,13 +302,26 @@ def handle_get_project(project_id, user):
             is_owner = str(project["designer_id"]) == str(user["id"])
 
             if not is_owner:
+                # Check project_members
                 cur.execute(
                     f"""SELECT id FROM {SCHEMA}.project_members
                         WHERE project_id = %s AND user_id = %s AND accepted = true""",
                     (project_id, str(user["id"])),
                 )
-                if not cur.fetchone():
-                    return error_response("Access denied", 403)
+                is_project_member = cur.fetchone() is not None
+
+                # Check team access (allowed_project_ids)
+                if not is_project_member:
+                    cur.execute(
+                        f"""SELECT id FROM {SCHEMA}.team_members
+                            WHERE member_id = %s AND accepted = true
+                              AND %s::uuid = ANY(allowed_project_ids)""",
+                        (str(user["id"]), project_id),
+                    )
+                    is_team_member = cur.fetchone() is not None
+
+                    if not is_team_member:
+                        return error_response("Access denied", 403)
 
             # Fetch stages
             cur.execute(

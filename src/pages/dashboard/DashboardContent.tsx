@@ -9,6 +9,9 @@ interface Project {
   area?: number;
   budget?: number;
   created_at: string;
+  is_team_project?: boolean;
+  designer_first_name?: string;
+  designer_last_name?: string;
 }
 
 interface User {
@@ -107,9 +110,20 @@ export function DashboardView({
                     <div className="h-28 bg-gradient-to-br from-terra-pale via-terra/10 to-stone/5 flex items-center justify-center relative">
                       <Icon name="Image" size={28} className="text-terra/25" />
                       <span className={`absolute top-3 right-3 text-xs px-2.5 py-1 rounded-full border font-medium ${statusInfo.color}`}>{statusInfo.label}</span>
+                      {p.is_team_project && (
+                        <span className="absolute top-3 left-3 text-xs px-2 py-0.5 rounded-full bg-purple-50 text-purple-600 border border-purple-200 font-medium flex items-center gap-1">
+                          <Icon name="Users" size={10} /> Команда
+                        </span>
+                      )}
                     </div>
                     <div className="p-4">
                       <h3 className="font-semibold text-stone text-sm mb-1 leading-snug">{p.title}</h3>
+                      {p.is_team_project && p.designer_first_name && (
+                        <div className="flex items-center gap-1.5 text-purple-500 text-xs mb-0.5">
+                          <Icon name="User" size={10} />
+                          <span>{p.designer_first_name} {p.designer_last_name}</span>
+                        </div>
+                      )}
                       {p.address && <div className="flex items-center gap-1.5 text-stone-mid text-xs"><Icon name="MapPin" size={11} /><span>{p.address}</span></div>}
                     </div>
                   </div>
